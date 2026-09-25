@@ -10,20 +10,22 @@ Covers:
 - Address token extraction
 - Address number+location keys
 - Compact Unicode n-grams
-- Country fallback rules
-- Cross-country high-specificity rules
-- Pair deduplication
-- Provenance union
-- Deterministic candidate ordering
-- Overflow reporting
-- Final budget behavior
-- One-to-many ground-truth evaluation
-- Singleton handling
+- Country fallback rules in both directions
+- Cross-country high-specificity rules and restrictions
+- Pair deduplication and bitwise provenance union
+- Deterministic candidate ordering (S2 sorted, then S3 sorted)
+- Overflow refinement, retained overflow postings, and complete overflow metadata
+- Final budget behavior and evidence ranking
+- One-to-many ground-truth evaluation and singleton handling
+- Disk-backed SQLite index lifecycle, bounded memory, and cleanup after success/failure
+- Streaming export and exact 1-to-1 row preservation
+- Deterministic repeated runs
 - Synthetic end-to-end fixture covering all 10 edge cases
 """
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 import tempfile
@@ -35,7 +37,7 @@ SRC_DIR = Path(__file__).resolve().parent.parent / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from blocking.candidate_store import CandidateStore, compute_candidate_rank
+from blocking.candidate_store import CandidateStore, compute_candidate_evidence_tier, rank_and_cap_candidates
 from blocking.config import (
     DEFAULT_LEGAL_STOPLIST,
     PROV_ADDRESS_NUMBER_LOCATION,
@@ -186,7 +188,6 @@ class TestCandidateStoreAndRanking(unittest.TestCase):
     def test_final_budget_behavior_and_ranking(self):
         """When candidate count exceeds safety budget, ranking must prioritize exact name and multi-block hits."""
         s1 = "S1-001"
-        # Create 10 S2 candidates with different evidence
         cands = {
             "S2-001": PROV_COMPACT_CHAR_NGRAM,  # Single weak hit
             "S2-002": PROV_EXACT_NAME | PROV_RARE_NAME_TOKEN,  # Exact name + token
@@ -198,7 +199,7 @@ class TestCandidateStoreAndRanking(unittest.TestCase):
 
         tsv_path = Path(self.temp_dir) / "budget.tsv"
         # Set max 2 candidates per source
-        self.store.export_tsv(tsv_path, [s1], max_candidates_per_source=2)
+        stats = self.store.export_tsv(tsv_path, [s1], max_candidates_per_source=2)
 
         content = tsv_path.read_text().strip().split("\t")
         retained = content[1].split(",")
@@ -206,6 +207,25 @@ class TestCandidateStoreAndRanking(unittest.TestCase):
         # Exact name hits (S2-002 and S2-004) must be prioritized over weak hits
         self.assertIn("S2-002", retained)
         self.assertIn("S2-004", retained)
+        self.assertEqual(stats["total_candidate_pairs_truncated_by_caps"], 2)
+        self.assertEqual(stats["s1_capped_by_safety_budget"], 1)
+
+    def test_streaming_export_and_singleton_preservation(self):
+        """Export must stream line by line and preserve singletons with empty candidate lists."""
+        s1_ids = ["S1-01", "S1-02", "S1-03"]
+        self.store.add_candidates("S1-01", {"S2-10": PROV_EXACT_NAME})
+        # S1-02 is a singleton with 0 candidates
+        self.store.add_candidates("S1-03", {"S3-20": PROV_EXACT_NAME})
+        self.store.flush()
+
+        tsv_path = Path(self.temp_dir) / "stream.tsv"
+        self.store.export_tsv(tsv_path, s1_ids)
+
+        lines = tsv_path.read_text().strip().splitlines()
+        self.assertEqual(len(lines), 3)
+        self.assertEqual(lines[0], "S1-01\tS2-10")
+        self.assertEqual(lines[1], "S1-02\t")
+        self.assertEqual(lines[2], "S1-03\tS3-20")
 
 
 class TestEvaluatorAndHoldout(unittest.TestCase):
@@ -236,7 +256,164 @@ class TestEvaluatorAndHoldout(unittest.TestCase):
         results = evaluator.evaluate_candidates(retrieved)
         self.assertEqual(results["counts"]["hits"], 2)
         self.assertAlmostEqual(results["pair_recall"], 2 / 3, places=4)
-        self.assertAlmostEqual(results["s1_coverage"], 1.0, places=4)  # Both non-singletons got >= 1 hit
+        self.assertAlmostEqual(results["union_recall"], 2 / 3, places=4)
+        self.assertAlmostEqual(results["s1_coverage"], 1.0, places=4)
+
+
+class TestBlockingPassesAndOverflow(unittest.TestCase):
+    """Test rare-token filtering, country fallback rules, refinement, and overflow retention."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.base_path = Path(self.temp_dir)
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_rare_token_frequency_filtering(self):
+        """Tokens with DF exceeding max_name_df must be filtered."""
+        tsv_path = self.base_path / "cand.tsv"
+        rows = [
+            "entity_id\tbusiness_name\tbusiness_address\tcountry\tbusiness_name_normalized\tbusiness_address_normalized\tcountry_normalized\tbusiness_name_is_missing\tbusiness_address_is_missing\tcountry_is_missing\n",
+        ]
+        for i in range(10):
+            rows.append(f"S2-{i}\tPopular Biz\t100 Main St\tUS\tpopular biz\t100 main st\tus\tFalse\tFalse\tFalse\n")
+        rows.append("S2-99\tRare Biz\t100 Main St\tUS\trare biz\t100 main st\tus\tFalse\tFalse\tFalse\n")
+        tsv_path.write_text("".join(rows), encoding="utf-8")
+
+        config = BlockingConfig(max_name_df_absolute=3)
+        index = CandidateSourceIndex("test_s2", config, temp_dir=self.base_path)
+        index.build_from_tsv(tsv_path)
+
+        self.assertIn(("us", "popular"), index.filtered_name_tokens)
+        self.assertNotIn(("us", "rare"), index.filtered_name_tokens)
+        index.close()
+
+    def test_overflow_event_structure_and_retention(self):
+        """Pathological block overflows must NOT be dropped to 0; postings must be retained."""
+        config = BlockingConfig(max_block_size=2)
+        index = CandidateSourceIndex("test_s2", config, temp_dir=self.base_path)
+
+        # Insert 3 candidates with token 'overflowing' (> max_block_size 2)
+        for i in range(1, 4):
+            index.add_candidate(f"S2-{i}", "us", "overflowing", "100 Road")
+        index.commit_index()
+
+        # Query with single token
+        cands = index.query_name_tokens("S1-001", "us", ["overflowing"])
+        # Postings MUST be retained, not discarded!
+        self.assertEqual(len(cands), 3)
+        self.assertEqual(len(index.overflow_events), 1)
+
+        event = index.overflow_events[0]
+        self.assertEqual(event["s1_id"], "S1-001")
+        self.assertEqual(event["source"], "test_s2")
+        self.assertEqual(event["block_family"], "rare_name_token")
+        self.assertEqual(event["key"], "overflowing")
+        self.assertEqual(event["generated_count"], 3)
+        self.assertEqual(event["retained_count"], 3)
+        self.assertEqual(event["truncated_count"], 0)
+        self.assertFalse(event["is_filtered"])
+        self.assertTrue(event["refinement_attempted"])
+        self.assertFalse(event["refined"])
+        index.close()
+
+    def test_overflow_refinement_success(self):
+        """When multi-token refinement reduces postings <= max_block_size, refined set is returned."""
+        config = BlockingConfig(max_block_size=2)
+        index = CandidateSourceIndex("test_s2", config, temp_dir=self.base_path)
+
+        # 3 candidates share 'phoenix', but only 1 has 'phoenix' + 'aerospace'
+        index.add_candidate("S2-1", "us", "phoenix aerospace", "100 Main")
+        index.add_candidate("S2-2", "us", "phoenix logistics", "200 Oak")
+        index.add_candidate("S2-3", "us", "phoenix dynamics", "300 Pine")
+        index.commit_index()
+
+        # Query with both tokens
+        cands = index.query_name_tokens("S1-001", "us", ["phoenix", "aerospace"])
+        self.assertIn("S2-1", cands)
+        index.close()
+
+    def test_missing_country_fallback_both_directions(self):
+        """Missing-country fallback must work in both directions and missing-missing."""
+        config = BlockingConfig(allow_missing_country_fallback=True)
+        index = CandidateSourceIndex("test_s2", config, temp_dir=self.base_path)
+
+        # Candidate with missing country
+        index.add_candidate("S2-missing", "", "omni tech", "123 Road")
+        # Candidate with known country
+        index.add_candidate("S2-known", "us", "omni tech", "456 Blvd")
+        index.commit_index()
+
+        # Direction 1: S1 has missing country -> matches S2-missing and S2-known
+        cands1 = generate_candidates_for_s1("S1-01", "omni tech", "123 Road", "", index, config)
+        self.assertIn("S2-missing", cands1)
+        self.assertIn("S2-known", cands1)
+        self.assertTrue(cands1["S2-missing"] & PROV_MISSING_COUNTRY_FALLBACK)
+        self.assertTrue(cands1["S2-known"] & PROV_MISSING_COUNTRY_FALLBACK)
+
+        # Direction 2: S1 has known country -> matches candidate with missing country via fallback
+        cands2 = generate_candidates_for_s1("S1-02", "omni tech", "123 Road", "france", index, config)
+        self.assertIn("S2-missing", cands2)
+        self.assertTrue(cands2["S2-missing"] & PROV_MISSING_COUNTRY_FALLBACK)
+        index.close()
+
+    def test_cross_country_restrictions(self):
+        """Cross-country candidates allowed ONLY through high specificity (exact name, >= 2 tokens, num_loc)."""
+        config = BlockingConfig(allow_cross_country_high_specificity=True, cross_country_min_rare_tokens=2)
+        index = CandidateSourceIndex("test_s2", config, temp_dir=self.base_path)
+
+        # S2 records from France
+        index.add_candidate("S2-exact", "france", "hyperion robotics", "100 Tech Park")
+        index.add_candidate("S2-single-token", "france", "hyperion logistics", "200 Paris St")
+        index.add_candidate("S2-multi-token", "france", "quantum cybernetics labs", "300 Lyon Rd")
+        index.commit_index()
+
+        # Query from US with exact name: allowed!
+        cands1 = generate_candidates_for_s1("S1-01", "hyperion robotics", "100 Tech Park", "us", index, config)
+        self.assertIn("S2-exact", cands1)
+        self.assertTrue(cands1["S2-exact"] & PROV_CROSS_COUNTRY_HIGH_SPECIFICITY)
+
+        # Query from US with only 1 shared token ('hyperion'): forbidden across countries!
+        cands2 = generate_candidates_for_s1("S1-02", "hyperion medical", "999 Other St", "us", index, config)
+        self.assertNotIn("S2-single-token", cands2)
+
+        # Query from US with 2 shared tokens ('quantum', 'cybernetics'): allowed!
+        cands3 = generate_candidates_for_s1("S1-03", "quantum cybernetics solutions", "555 Ave", "us", index, config)
+        self.assertIn("S2-multi-token", cands3)
+        self.assertTrue(cands3["S2-multi-token"] & PROV_CROSS_COUNTRY_HIGH_SPECIFICITY)
+        index.close()
+
+    def test_disk_backed_index_lifecycle_and_cleanup(self):
+        """Temporary SQLite database files must be removed on close or context exit."""
+        config = BlockingConfig()
+        index = CandidateSourceIndex("test_lifecycle", config, temp_dir=self.base_path)
+        index.add_candidate("S2-1", "us", "test entity", "100 St")
+        index.commit_index()
+
+        db_path = index.db_path
+        self.assertIsNotNone(db_path)
+        self.assertTrue(db_path.is_file())
+
+        index.close()
+        self.assertFalse(db_path.exists())
+
+    def test_cleanup_after_injected_failure(self):
+        """Index cleanup must remove temporary files even when an exception occurs."""
+        config = BlockingConfig()
+        db_path = None
+        try:
+            with CandidateSourceIndex("test_fail", config, temp_dir=self.base_path) as index:
+                index.add_candidate("S2-1", "us", "test entity", "100 St")
+                index.commit_index()
+                db_path = index.db_path
+                self.assertTrue(db_path.is_file())
+                raise RuntimeError("Simulated pipeline failure")
+        except RuntimeError:
+            pass
+
+        self.assertIsNotNone(db_path)
+        self.assertFalse(db_path.exists())
 
 
 class TestSyntheticFixture(unittest.TestCase):
@@ -393,103 +570,37 @@ class TestSyntheticFixture(unittest.TestCase):
         # Case 9: Singleton S1 has empty candidate list
         self.assertEqual(s1_cands_map["S1-09"], [])
 
+        # Evaluation metrics verification
+        self.assertEqual(diags["evaluation"]["counts"]["hits"], 9)
+        self.assertEqual(diags["evaluation"]["pair_recall"], 1.0)
+        self.assertEqual(diags["evaluation"]["s1_coverage"], 1.0)
+        self.assertTrue(diags["evaluation"]["target_achieved"])
 
-class TestBlockingPassesAndOverflow(unittest.TestCase):
-    """Test rare-token filtering, country fallback rules, and overflow metadata tracking."""
-
-    def setUp(self):
-        self.temp_dir = tempfile.mkdtemp()
-        self.base_path = Path(self.temp_dir)
-
-    def tearDown(self):
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
-
-    def test_rare_token_frequency_filtering(self):
-        """Tokens with DF exceeding max_name_df must be filtered and not indexed."""
-        tsv_path = self.base_path / "cand.tsv"
-        # 10 rows sharing 'popular', 1 row with 'rare'
-        rows = [
+    def test_repeated_runs_determinism(self):
+        """Repeated runs of the blocking pipeline must produce byte-for-byte identical candidate TSVs."""
+        s1_rows = [
             "entity_id\tbusiness_name\tbusiness_address\tcountry\tbusiness_name_normalized\tbusiness_address_normalized\tcountry_normalized\tbusiness_name_is_missing\tbusiness_address_is_missing\tcountry_is_missing\n",
+            "S1-01\tDelta Dynamics\t100 First St\tUS\tdelta dynamics\t100 first st\tus\tFalse\tFalse\tFalse\n",
         ]
-        for i in range(10):
-            rows.append(f"S2-{i}\tPopular Biz\t100 Main St\tUS\tpopular biz\t100 main st\tus\tFalse\tFalse\tFalse\n")
-        rows.append("S2-99\tRare Biz\t100 Main St\tUS\trare biz\t100 main st\tus\tFalse\tFalse\tFalse\n")
-        tsv_path.write_text("".join(rows), encoding="utf-8")
+        s2_rows = [
+            "entity_id\tbusiness_name\tbusiness_address\tcountry\tbusiness_name_normalized\tbusiness_address_normalized\tcountry_normalized\tbusiness_name_is_missing\tbusiness_address_is_missing\tcountry_is_missing\n",
+            "S2-01\tDelta Dynamics Corp\t100 First St\tUS\tdelta dynamics corp\t100 first st\tus\tFalse\tFalse\tFalse\n",
+        ]
+        s3_rows = [
+            "entity_id\tbusiness_name\tbusiness_address\tcountry\tbusiness_name_normalized\tbusiness_address_normalized\tcountry_normalized\tbusiness_name_is_missing\tbusiness_address_is_missing\tcountry_is_missing\n",
+            "S3-01\tDelta Dynamics Inc\t100 First St\tUS\tdelta dynamics inc\t100 first st\tus\tFalse\tFalse\tFalse\n",
+        ]
+        (self.train_dir / "train_source1.tsv").write_text("".join(s1_rows), encoding="utf-8")
+        (self.train_dir / "train_source2.tsv").write_text("".join(s2_rows), encoding="utf-8")
+        (self.train_dir / "train_source3.tsv").write_text("".join(s3_rows), encoding="utf-8")
 
-        config = BlockingConfig(max_name_df_absolute=3)
-        index = CandidateSourceIndex("test_s2", config)
-        index.build_from_tsv(tsv_path)
+        config1 = BlockingConfig(split="train", input_dir=self.dataset_dir, output_dir=self.base_path / "run1")
+        tsv1, _, _ = run_blocking_pipeline(config1, quiet=True)
 
-        # 'popular' must be in filtered_name_tokens, not in name_token_index
-        self.assertIn(("us", "popular"), index.filtered_name_tokens)
-        self.assertNotIn(("us", "popular"), index.name_token_index)
+        config2 = BlockingConfig(split="train", input_dir=self.dataset_dir, output_dir=self.base_path / "run2")
+        tsv2, _, _ = run_blocking_pipeline(config2, quiet=True)
 
-        # 'rare' must be in name_token_index
-        self.assertIn(("us", "rare"), index.name_token_index)
-
-    def test_overflow_event_structure(self):
-        """Pathological block overflows must record complete metadata dictionaries."""
-        config = BlockingConfig(max_block_size=2)
-        index = CandidateSourceIndex("test_s2", config)
-        index.cand_ids = ["S2-1", "S2-2", "S2-3"]
-        index.cand_countries = ["us", "us", "us"]
-        index.name_token_index[("us", "overflowing")] = [0, 1, 2]  # 3 postings > max_block_size=2
-
-        # Query with single token
-        cands = index.query_name_tokens("S1-001", "us", ["overflowing"])
-        self.assertEqual(len(cands), 0)
-        self.assertEqual(len(index.overflow_events), 1)
-
-        event = index.overflow_events[0]
-        self.assertEqual(event["s1_id"], "S1-001")
-        self.assertEqual(event["source"], "test_s2")
-        self.assertEqual(event["block_family"], "rare_name_token")
-        self.assertEqual(event["key"], "overflowing")
-        self.assertEqual(event["generated_count"], 3)
-        self.assertEqual(event["retained_count"], 0)
-        self.assertEqual(event["truncated_count"], 3)
-        self.assertFalse(event["is_filtered"])
-        self.assertTrue(event["refinement_attempted"])
-
-    def test_country_fallback_rules(self):
-        """Missing-country records must route through missing-country fallback."""
-        config = BlockingConfig(allow_missing_country_fallback=True)
-        index = CandidateSourceIndex("test_s2", config)
-        index.cand_ids = ["S2-missing"]
-        index.cand_countries = [""]
-        index.missing_country_exact["omni tech"] = [0]
-
-        # S1 has missing country
-        cands = generate_candidates_for_s1(
-            s1_id="S1-001",
-            name_norm="omni tech",
-            addr_norm="123 Road",
-            country_norm="",
-            index=index,
-            config=config,
-        )
-        self.assertIn("S2-missing", cands)
-        self.assertTrue(cands["S2-missing"] & PROV_MISSING_COUNTRY_FALLBACK)
-
-    def test_cross_country_high_specificity_rules(self):
-        """Cross-country candidate must be allowed only through high-specificity evidence."""
-        config = BlockingConfig(allow_cross_country_high_specificity=True)
-        index = CandidateSourceIndex("test_s2", config)
-        index.cand_ids = ["S2-fr"]
-        index.cand_countries = ["france"]
-        index.exact_name_global["hyperion robotics"] = [0]
-
-        # S1 is US, Candidate is France
-        cands = generate_candidates_for_s1(
-            s1_id="S1-001",
-            name_norm="hyperion robotics",
-            addr_norm="100 Main St",
-            country_norm="us",
-            index=index,
-            config=config,
-        )
-        self.assertIn("S2-fr", cands)
-        self.assertTrue(cands["S2-fr"] & PROV_CROSS_COUNTRY_HIGH_SPECIFICITY)
+        self.assertEqual(tsv1.read_bytes(), tsv2.read_bytes())
 
 
 if __name__ == "__main__":

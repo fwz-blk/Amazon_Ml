@@ -91,7 +91,7 @@ class BlockingConfig:
     holdout_salt: str = "amazon_ml_2026_val_salt"
 
     # SQLite performance tuning
-    sqlite_cache_size_kb: int = 4000
+    sqlite_cache_size_kb: int = 64000
     batch_size: int = 50000
 
     def get_max_name_df(self, total_records: int) -> int:

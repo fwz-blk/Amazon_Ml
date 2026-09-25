@@ -11,6 +11,7 @@ Requirements:
 - Track candidate count distribution (mean, median, p95, max)
 - Track candidate reduction ratio, block overflows, cap triggers, and lost true pairs
 - Minimum acceptance target: >= 99% pair recall on held-out validation set
+- Support memory-bounded evaluation streaming directly from CandidateStore
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from __future__ import annotations
 import hashlib
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from blocking.config import (
     PROV_ADDRESS_NUMBER_LOCATION,
@@ -95,13 +96,37 @@ class BlockingEvaluator:
         total_candidate_universe: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        Evaluate retrieved candidates against ground truth.
-
-        Args:
-            retrieved_candidates: Dict[s1_id, Dict[cand_id, provenance_mask]]
-            overflow_events: Optional list of overflow events recorded during blocking
-            total_candidate_universe: Total possible candidate pairs (|S1| * (|S2| + |S3|))
+        Evaluate in-memory retrieved candidates against ground truth.
         """
+        return self._evaluate_stream(
+            lambda s1_id: retrieved_candidates.get(s1_id, {}),
+            overflow_events=overflow_events,
+            total_candidate_universe=total_candidate_universe,
+        )
+
+    def evaluate_from_store(
+        self,
+        store: Any,
+        overflow_events: Optional[List[Dict[str, Any]]] = None,
+        total_candidate_universe: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Evaluate candidate retrieval streaming directly from CandidateStore,
+        avoiding in-memory retention of full candidate sets.
+        """
+        return self._evaluate_stream(
+            lambda s1_id: store.get_candidates_for_s1(s1_id),
+            overflow_events=overflow_events,
+            total_candidate_universe=total_candidate_universe,
+        )
+
+    def _evaluate_stream(
+        self,
+        candidate_getter: Callable[[str], Dict[str, int]],
+        overflow_events: Optional[List[Dict[str, Any]]] = None,
+        total_candidate_universe: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Core streaming evaluation logic."""
         hits = 0
         s2_hits = 0
         s3_hits = 0
@@ -117,7 +142,7 @@ class BlockingEvaluator:
         source_counts: Dict[str, int] = defaultdict(int)
 
         for s1_id, true_cands in self.ground_truth.items():
-            retrieved = retrieved_candidates.get(s1_id, {})
+            retrieved = candidate_getter(s1_id)
             candidate_counts.append(len(retrieved))
 
             if not retrieved:
@@ -151,7 +176,6 @@ class BlockingEvaluator:
         # Unique recovery per block family (hits recovered ONLY by this block family)
         unique_recovery: Dict[str, int] = {name: 0 for name in PROVENANCE_NAMES.values()}
         for (s1_id, cid), prov in pair_prov_masks.items():
-            # Check if exactly one block flag is active among the 5 main passes
             active_flags = [flag for flag in PROVENANCE_NAMES if (prov & flag)]
             if len(active_flags) == 1:
                 unique_recovery[PROVENANCE_NAMES[active_flags[0]]] += 1
@@ -160,6 +184,7 @@ class BlockingEvaluator:
         count_len = len(candidate_counts)
         median = candidate_counts[count_len // 2] if count_len else 0
         p95 = candidate_counts[int(count_len * 0.95)] if count_len else 0
+        p99 = candidate_counts[int(count_len * 0.99)] if count_len else 0
         max_c = candidate_counts[-1] if count_len else 0
         total_retrieved = sum(candidate_counts)
         mean = total_retrieved / count_len if count_len else 0
@@ -180,7 +205,10 @@ class BlockingEvaluator:
 
         return {
             "pair_recall": round(pair_recall, 5),
+            # Union recall: defined as fraction of true ground-truth pairs captured across
+            # the full multi-pass candidate union
             "union_recall": round(pair_recall, 5),
+            "union_recall_definition": "Proportion of all true matching candidate pairs retrieved across the union of all blocking passes",
             "s1_coverage": round(s1_coverage, 5),
             "s2_recall": round(s2_recall, 5),
             "s3_recall": round(s3_recall, 5),
@@ -188,6 +216,7 @@ class BlockingEvaluator:
             "counts": {
                 "total_true_pairs": self.total_true_pairs,
                 "hits": hits,
+                "missed_true_pairs": self.total_true_pairs - hits,
                 "s2_true_pairs": self.total_s2_true_pairs,
                 "s2_hits": s2_hits,
                 "s3_true_pairs": self.total_s3_true_pairs,
@@ -203,6 +232,7 @@ class BlockingEvaluator:
                 "median": median,
                 "mean": round(mean, 2),
                 "p95": p95,
+                "p99": p99,
                 "max": max_c,
             },
             "candidate_reduction_ratio": round(reduction_ratio, 6) if reduction_ratio else None,

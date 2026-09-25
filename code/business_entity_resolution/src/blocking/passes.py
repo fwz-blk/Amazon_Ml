@@ -3,7 +3,7 @@ Multi-Pass Blocking Orchestrator
 Amazon ML Challenge 2026 - Business Entity Resolution
 
 Orchestrates the 6 blocking pass families:
-1. Country partition
+1. Country partition (default)
 2. Exact normalized-name block
 3. Rare name-token block
 4. Address-token/location block
@@ -71,50 +71,49 @@ def generate_candidates_for_s1(
         if name_norm else []
     )
 
-    # 2. Same-Country Blocking Passes (Default Partition)
+    # 2. Known Country S1: Same-Country Blocking Passes (Default Partition)
     if not is_missing_country:
         # Pass 2: Exact normalized name
         if name_norm:
-            for idx in index.query_exact_name(country_norm, name_norm):
-                cid = index.cand_ids[idx]
+            for cid in index.query_exact_name(country_norm, name_norm):
                 candidates[cid] = candidates.get(cid, 0) | PROV_EXACT_NAME
 
         # Pass 3: Rare name tokens
         if name_tokens:
-            for idx in index.query_name_tokens(s1_id, country_norm, name_tokens):
-                cid = index.cand_ids[idx]
+            for cid in index.query_name_tokens(s1_id, country_norm, name_tokens):
                 candidates[cid] = candidates.get(cid, 0) | PROV_RARE_NAME_TOKEN
 
         # Pass 4: Address tokens
         if addr_tokens:
-            for idx in index.query_address_tokens(s1_id, country_norm, addr_tokens):
-                cid = index.cand_ids[idx]
+            for cid in index.query_address_tokens(s1_id, country_norm, addr_tokens):
                 candidates[cid] = candidates.get(cid, 0) | PROV_ADDRESS_TOKEN
 
         # Pass 5: Address number + location keys
         if num_loc_keys:
-            for idx in index.query_num_loc(s1_id, country_norm, num_loc_keys):
-                cid = index.cand_ids[idx]
+            for cid in index.query_num_loc(s1_id, country_norm, num_loc_keys):
                 candidates[cid] = candidates.get(cid, 0) | PROV_ADDRESS_NUMBER_LOCATION
 
         # Pass 6: Compact Unicode character n-grams
         if ngrams:
-            for idx in index.query_compact_ngrams(s1_id, country_norm, ngrams):
-                cid = index.cand_ids[idx]
+            for cid in index.query_compact_ngrams(s1_id, country_norm, ngrams):
                 candidates[cid] = candidates.get(cid, 0) | PROV_COMPACT_CHAR_NGRAM
 
         # Cross-country fallback (high specificity only)
         if config.allow_cross_country_high_specificity:
-            for idx in index.query_cross_country_high_specificity(
-                country_norm, name_norm, name_tokens, num_loc_keys, config.max_block_size
+            for cid in index.query_cross_country_high_specificity(
+                country_norm, name_norm, name_tokens, num_loc_keys
             ):
-                cid = index.cand_ids[idx]
                 candidates[cid] = candidates.get(cid, 0) | PROV_CROSS_COUNTRY_HIGH_SPECIFICITY
 
-    # 3. Missing-Country Fallback
-    if is_missing_country and config.allow_missing_country_fallback:
-        for idx in index.query_missing_country_fallback(name_norm, name_tokens, num_loc_keys):
-            cid = index.cand_ids[idx]
-            candidates[cid] = candidates.get(cid, 0) | PROV_MISSING_COUNTRY_FALLBACK
+        # Missing-country candidate records fallback (known-country S1 against missing-country candidates)
+        if config.allow_missing_country_fallback:
+            for cid in index.query_missing_country_candidates(name_norm, name_tokens, num_loc_keys):
+                candidates[cid] = candidates.get(cid, 0) | PROV_MISSING_COUNTRY_FALLBACK
+
+    # 3. Missing Country S1: Global Fallback across all candidate records
+    else:
+        if config.allow_missing_country_fallback:
+            for cid in index.query_global_fallback_for_missing_s1(name_norm, name_tokens, num_loc_keys):
+                candidates[cid] = candidates.get(cid, 0) | PROV_MISSING_COUNTRY_FALLBACK
 
     return candidates

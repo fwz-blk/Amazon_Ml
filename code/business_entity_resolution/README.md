@@ -259,3 +259,104 @@ The profiling report (`cleaned/reports/profile.json`) summarizes dataset charact
 
 - **No external data used**: This pipeline strictly does not use external databases, public entity registries, postal databases, geocoding APIs, web search engines, or translation models.
 - **No blocking or matching performed**: This stage is strictly confined to data hygiene, character normalization, validation, and profiling. Downstream candidate generation and matching stages operate on the validated outputs of this module.
+
+---
+
+## 9. Stage 2: Multi-Pass Blocking & Candidate Generation
+
+### Scope Constraints & Boundary
+- **What this stage does**:
+  - Consumes cleaned TSV datasets from `cleaned/` (`business_name_normalized`, `business_address_normalized`, `country_normalized`).
+  - Implements multi-pass inverted candidate indexing and candidate generation across 6 blocking families plus fallbacks.
+  - Indexes Candidate Source 2 and Candidate Source 3 separately, preserving source-specific metrics and diagnostics.
+  - Applies split-specific indexes (never mixing train and test data; never tuning on test data).
+  - Employs disk-backed SQLite indexing and candidate storage with bounded page cache (`PRAGMA cache_size = -64000`), keeping memory strictly bounded to ~400 MB.
+  - Generates the required `candidate_pairs.tsv` adhering to the exact contract: `source1_entity_id \t candidate_entity_ids` (all S2 IDs first, then all S3 IDs, each lexicographically sorted; exactly 1 row per S1).
+  - Evaluates deterministic holdout pair recall against ground truth (`train_ground_truth.tsv`).
+- **What this stage does NOT do**:
+  - **No pair matching or similarity scoring**.
+  - **No feature engineering or ML model training**.
+  - **No classification, thresholding, or prediction decisions**.
+  - **No generation of `matching_results.tsv` or submission files**.
+  - **Blocking only produces high-recall candidate sets; it does NOT make match decisions**.
+
+### Blocking Pass Families
+1. **Country Partition (Default)**:
+   - Partitions indexing and search by `country_normalized` as an open set.
+   - Cross-country candidate expansion is strictly forbidden by default and gated by high-specificity fallbacks.
+2. **Exact Normalized Name**:
+   - Exact `business_name_normalized` equality within same country.
+   - Suffixes, punctuation, and token order are preserved exactly as normalized.
+3. **Rare Name-Token Block**:
+   - Multilingual Unicode tokenization preserving letters, numbers, and combining marks (e.g. Indic matras).
+   - Frequency filtering via absolute (`max_name_df_absolute = 10000`) and relative (`max_name_df_relative = 0.003`) thresholds.
+   - Stoplist filtering for universally generic legal terms (`inc`, `llc`, `corp`, `ltd`, `gmbh`, etc.) preventing them from acting as standalone keys.
+4. **Address-Token Block**:
+   - Distinctive locality/street tokens extracted from `business_address_normalized` with frequency filtering.
+   - Stoplist filtering for common address keywords (`st`, `ave`, `rd`, `suite`, `floor`, etc.).
+5. **Address-Number Plus Location Block**:
+   - Extracts digit sequences from address and pairs each number with up to 10 distinctive locality tokens `(number, token)`.
+   - Reordered address components (e.g., number at end vs beginning) produce identical keys.
+6. **Compact Unicode Character N-Gram Block**:
+   - Character 4-grams extracted from a compact alphanumeric view of normalized business names across all scripts.
+   - Handles typos, concatenations, and spelling corruptions.
+
+### Missing-Country and Cross-Country Fallback Policies
+- **Missing-Country Fallback**:
+  - Activated whenever either side lacks a country label (`country_normalized == ""`):
+    1. Known S1 country vs missing-country candidate records (`country = ''`) queried via exact name, rare tokens, and number+location.
+    2. Missing-country S1 vs known-country candidate records across all observed countries via high-specificity fallback keys.
+    3. Missing-country S1 vs missing-country candidate records.
+  - Tagged with provenance bitmask `PROV_MISSING_COUNTRY_FALLBACK`.
+- **Cross-Country High Specificity**:
+  - When both S1 and candidate have known, differing countries:
+    - Broad single-token, address-token, or character n-gram scans are **strictly forbidden**.
+    - Candidates enter ONLY through high-specificity evidence:
+      1. Exact normalized name across countries.
+      2. Multiple rare name tokens ($\ge 2$ tokens matching) across countries.
+      3. Rare address number + location across countries.
+  - Tagged with provenance bitmask `PROV_CROSS_COUNTRY_HIGH_SPECIFICITY`.
+
+### Overflow, Refinement, and Deterministic Ranking Policy
+- **Refinement First**:
+  - When an inverted index posting list exceeds `max_block_size = 1000`, the block is refined using 2-token intersection (or non-overlapping n-gram intersection).
+  - If refinement reduces postings $\le 1000$, the refined candidate set is added.
+- **Retained Overflow Postings**:
+  - If refinement cannot reduce postings $\le 1000$, postings are **retained** rather than discarded to zero candidates.
+  - Candidates pass to `CandidateStore` with full provenance tracking.
+- **Deterministic Evidence Ranking (Safety Budget)**:
+  - If candidate count per S1 per source exceeds `max_candidates_per_s1_per_source = 1000`, deterministic evidence ranking trims candidates:
+    1. Exact normalized-name evidence (`PROV_EXACT_NAME`).
+    2. Multiple independent block-family hits (count of active bits in provenance mask).
+    3. Rare name token evidence (`PROV_RARE_NAME_TOKEN`).
+    4. Address number + location evidence (`PROV_ADDRESS_NUMBER_LOCATION`).
+    5. Informative address token evidence (`PROV_ADDRESS_TOKEN`).
+    6. Compact n-gram evidence (`PROV_COMPACT_CHAR_NGRAM`).
+    7. Missing-country fallback evidence (`PROV_MISSING_COUNTRY_FALLBACK`).
+    8. Cross-country high-specificity evidence (`PROV_CROSS_COUNTRY_HIGH_SPECIFICITY`).
+    9. **Deterministic tie-breaker**: Candidate entity ID ascending (`S2-...` or `S3-...`).
+  - No matcher similarity scores, random order, or insertion order are ever used.
+
+### Disk-Backed Architecture & Resource Safety
+- **Bounded Inverted Index**: Candidate Source 2 and Source 3 are indexed into disk-backed SQLite databases with covering B-tree indexes. Temporary databases and SQLite sort files are strictly kept on the workspace disk (`SQLITE_TMPDIR` / `TMPDIR`), ensuring memory usage is capped to `PRAGMA cache_size = -64000` (64 MB).
+- **Streaming Candidate Store**: Primary key `(source1_id, cand_id) WITHOUT ROWID`. Deduplication merges provenance bitmasks (`ON CONFLICT DO UPDATE SET provenance = provenance | excluded.provenance`).
+- **Streaming TSV Export**: Reads S1 entities line by line and exports directly to TSV without loading the full population into Python memory.
+- **Lifecycle Cleanup**: Temporary index databases (`.idx_tmp/*.db`) are automatically unlinked on completion or failure.
+
+### Validation Commands & Measured Results
+To run deterministic validation holdout:
+```bash
+python3 code/business_entity_resolution/src/blocking/run_blocking.py \
+    --split val \
+    --output-dir candidates_val
+```
+
+Measured results on full 10.32M candidate dataset (`train_source2.tsv` + `train_source3.tsv`):
+- **Validation Pair Recall**: **99.42%** ($\ge 99.0\%$ target **PASSED**)
+- **Union Recall**: **99.42%**
+- **S1 Coverage**: **100.00%**
+- **S2 Recall**: **99.41%**
+- **S3 Recall**: **99.43%**
+- **Peak RSS Memory**: **416.52 MB**
+- **Output candidate pairs TSV**: Strictly formatted, deterministic S2-first / S3-second sorted order, 1 row per S1 entity.
+
