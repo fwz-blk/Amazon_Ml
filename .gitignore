@@ -4,7 +4,16 @@ cleaned/test/
 cleaned/**/*.tsv
 cleaned/**/.tmp_*
 
+# Candidate generation outputs and databases (multi-gigabyte artifacts)
+candidates*/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+candidate_pairs*.tsv
+
 # Python caches
 __pycache__/
 *.py[cod]
 *$py.class
+
