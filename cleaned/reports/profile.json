@@ -1,6 +1,6 @@
 {
   "title": "Amazon ML Challenge 2026 - Dataset Profiling Report",
-  "timestamp": "2026-09-25T15:53:55.447594+00:00",
+  "timestamp": "2026-09-25T19:28:29.964701+00:00",
   "summary": {
     "total_files": 6,
     "total_rows": 24229173,
@@ -8,7 +8,8 @@
       "train",
       "test"
     ],
-    "elapsed_seconds": 570.08
+    "elapsed_seconds": 5149.39,
+    "memory_model": "streaming_row_transformation_with_disk_backed_sqlite_aggregation"
   },
   "files": {
     "train/train_source1.tsv": {
@@ -491,6 +492,8 @@
         }
       },
       "duplicate_looking_normalized_value_counts": {
+        "digest_algorithm": "sha256",
+        "storage_backend": "disk_backed_sqlite",
         "normalized_name": {
           "unique_values_with_duplicates": 178080,
           "total_duplicate_rows": 846097
@@ -504,8 +507,12 @@
           "total_duplicate_rows": 0
         }
       },
-      "duplicate_entity_id_findings": [],
-      "malformed_row_findings": [],
+      "duplicate_entity_id_findings": {
+        "status": "none_detected_during_mandatory_validation"
+      },
+      "malformed_row_findings": {
+        "status": "none_detected_during_mandatory_validation"
+      },
       "country_frequency_counts": {
         "US": 1323633,
         "India": 883188
@@ -1017,6 +1024,8 @@
         }
       },
       "duplicate_looking_normalized_value_counts": {
+        "digest_algorithm": "sha256",
+        "storage_backend": "disk_backed_sqlite",
         "normalized_name": {
           "unique_values_with_duplicates": 327729,
           "total_duplicate_rows": 1169380
@@ -1030,8 +1039,12 @@
           "total_duplicate_rows": 93153
         }
       },
-      "duplicate_entity_id_findings": [],
-      "malformed_row_findings": [],
+      "duplicate_entity_id_findings": {
+        "status": "none_detected_during_mandatory_validation"
+      },
+      "malformed_row_findings": {
+        "status": "none_detected_during_mandatory_validation"
+      },
       "country_frequency_counts": {
         "India": 2017799,
         "US": 3016817
@@ -1543,6 +1556,8 @@
         }
       },
       "duplicate_looking_normalized_value_counts": {
+        "digest_algorithm": "sha256",
+        "storage_backend": "disk_backed_sqlite",
         "normalized_name": {
           "unique_values_with_duplicates": 326688,
           "total_duplicate_rows": 1138818
@@ -1556,8 +1571,12 @@
           "total_duplicate_rows": 64870
         }
       },
-      "duplicate_entity_id_findings": [],
-      "malformed_row_findings": [],
+      "duplicate_entity_id_findings": {
+        "status": "none_detected_during_mandatory_validation"
+      },
+      "malformed_row_findings": {
+        "status": "none_detected_during_mandatory_validation"
+      },
       "country_frequency_counts": {
         "US": 3170056,
         "India": 2115547
@@ -2052,6 +2071,8 @@
         }
       },
       "duplicate_looking_normalized_value_counts": {
+        "digest_algorithm": "sha256",
+        "storage_backend": "disk_backed_sqlite",
         "normalized_name": {
           "unique_values_with_duplicates": 130383,
           "total_duplicate_rows": 624683
@@ -2065,8 +2086,12 @@
           "total_duplicate_rows": 0
         }
       },
-      "duplicate_entity_id_findings": [],
-      "malformed_row_findings": [],
+      "duplicate_entity_id_findings": {
+        "status": "none_detected_during_mandatory_validation"
+      },
+      "malformed_row_findings": {
+        "status": "none_detected_during_mandatory_validation"
+      },
       "country_frequency_counts": {
         "US": 663106,
         "France": 259452,
@@ -2579,6 +2604,8 @@
         }
       },
       "duplicate_looking_normalized_value_counts": {
+        "digest_algorithm": "sha256",
+        "storage_backend": "disk_backed_sqlite",
         "normalized_name": {
           "unique_values_with_duplicates": 303701,
           "total_duplicate_rows": 1061622
@@ -2592,8 +2619,12 @@
           "total_duplicate_rows": 79397
         }
       },
-      "duplicate_entity_id_findings": [],
-      "malformed_row_findings": [],
+      "duplicate_entity_id_findings": {
+        "status": "none_detected_during_mandatory_validation"
+      },
+      "malformed_row_findings": {
+        "status": "none_detected_during_mandatory_validation"
+      },
       "country_frequency_counts": {
         "India": 2312565,
         "France": 703378,
@@ -3106,6 +3137,8 @@
         }
       },
       "duplicate_looking_normalized_value_counts": {
+        "digest_algorithm": "sha256",
+        "storage_backend": "disk_backed_sqlite",
         "normalized_name": {
           "unique_values_with_duplicates": 301519,
           "total_duplicate_rows": 1026371
@@ -3119,8 +3152,12 @@
           "total_duplicate_rows": 56220
         }
       },
-      "duplicate_entity_id_findings": [],
-      "malformed_row_findings": [],
+      "duplicate_entity_id_findings": {
+        "status": "none_detected_during_mandatory_validation"
+      },
+      "malformed_row_findings": {
+        "status": "none_detected_during_mandatory_validation"
+      },
       "country_frequency_counts": {
         "India": 2405000,
         "France": 731615,

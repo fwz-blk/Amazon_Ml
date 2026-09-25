@@ -1,0 +1,34 @@
+{
+  "generation_id": ".generation_staging_1790359799970_52558",
+  "created_at": "2026-09-25T19:28:29.964750+00:00",
+  "splits": [
+    "train",
+    "test"
+  ],
+  "files": {
+    "train/train_source1.tsv": {
+      "rows": 2206821,
+      "sha256": "d7a9904118018f02ebe042d436c604d0302ca78acb95588e1e1b2278bd06c1f6"
+    },
+    "train/train_source2.tsv": {
+      "rows": 5034616,
+      "sha256": "93a3d86100cbabf7e09ac6e3c87bae943c740566594aba90e7e41bc14abedf73"
+    },
+    "train/train_source3.tsv": {
+      "rows": 5285603,
+      "sha256": "6f4c70ef9031b2244516771c2488e95a10560cba68a9882e049581ceb5f818d9"
+    },
+    "test/test_source1.tsv": {
+      "rows": 1732544,
+      "sha256": "7d5fb22800e7092a34be8e0cfd7e190ffb8a55df763d6126e1bfbbff622fb5c2"
+    },
+    "test/test_source2.tsv": {
+      "rows": 4887273,
+      "sha256": "7753de625a14b37cbf36f83c90dee922ffb14b3e58caa1076ba5867369fa2674"
+    },
+    "test/test_source3.tsv": {
+      "rows": 5082316,
+      "sha256": "41937d25bf7617494528dbc1e5b5d06647420212f1e4fe7e20e57734a8fc9c35"
+    }
+  }
+}

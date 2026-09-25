@@ -20,12 +20,12 @@ Core Principles:
    - Country normalized using only NFC + casefold() + whitespace normalization.
    - Missing fields flagged with boolean indicators and kept empty (no placeholders).
 3. Structural integrity & quality gates:
-   - Validates input UTF-8, headers, column counts, entity_id format & uniqueness.
+   - Mandatory validation of UTF-8, headers, column counts, entity_id format & uniqueness.
    - Bounded in-memory streaming transformation with disk-backed SQLite aggregation
-     for exact uniqueness and collision-resistant SHA-256 duplicate profiling.
-   - Staged generation directory with atomic publication and rollback-safe replacement.
+     for exact uniqueness, length distributions, and collision-resistant SHA-256 duplicate profiling.
+   - Staged generation directory with rollback-safe multi-directory transaction publication.
    - Recomputes all normalized values during quality verification to guarantee 100% derivation accuracy.
-   - Produces diagnostic profile.json and quality_checks.json reports.
+   - Produces diagnostic profile.json, quality_checks.json, and manifest.json reports.
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ import gc
 import hashlib
 import itertools
 import json
+import math
 import os
 import re
 import shutil
@@ -157,6 +158,11 @@ class QualityCheckError(Exception):
         )
 
 
+class PublicationTransactionError(Exception):
+    """Raised when publication transaction fails and triggers automatic rollback."""
+    pass
+
+
 # ==============================================================================
 # Normalization Functions
 # ==============================================================================
@@ -233,8 +239,23 @@ def normalize_country(text: Optional[str]) -> str:
 
 
 # ==============================================================================
-# Helper Functions for Character & Script Profiling
+# Helper Functions for Character & Script Profiling and Chunked Hashing
 # ==============================================================================
+
+def sha256_file(file_path: Path, chunk_size: int = 1024 * 1024) -> str:
+    """
+    Compute SHA-256 hex digest of a file in streaming 1MB chunks (strictly bounded memory).
+    Never loads multi-gigabyte files into RAM.
+    """
+    hasher = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            hasher.update(chunk)
+    return hasher.hexdigest()
+
 
 def get_script_category(char: str) -> str:
     """Identify script category of a Unicode character."""
@@ -299,14 +320,14 @@ def get_expected_prefix(filename: str, custom_prefix: Optional[str] = None) -> s
 
 
 # ==============================================================================
-# Disk-Backed Profiler (Bounded-Memory & Collision-Resistant)
+# Disk-Backed Profiler (Bounded-Memory, SQLite Length Counts, SHA-256)
 # ==============================================================================
 
 class DiskBackedProfiler:
     """
     Disk-backed profiler providing exact entity_id uniqueness validation,
-    exact collision-resistant SHA-256 duplicate metrics, and country frequency counts
-    with strictly bounded in-memory footprint.
+    exact collision-resistant SHA-256 duplicate metrics, disk-backed length aggregation,
+    and country frequency counts with strictly bounded in-memory footprint.
 
     Ephemeral SQLite tables with capped in-memory page cache (4MB) ensure that memory
     usage is strictly bounded regardless of dataset scale.
@@ -326,6 +347,9 @@ class DiskBackedProfiler:
         self.cur.execute("CREATE TABLE addr_digests (digest TEXT PRIMARY KEY, cnt INTEGER)")
         self.cur.execute("CREATE TABLE record_digests (digest TEXT PRIMARY KEY, cnt INTEGER)")
         self.cur.execute("CREATE TABLE countries (country TEXT PRIMARY KEY, cnt INTEGER)")
+        self.cur.execute(
+            "CREATE TABLE length_counts (col TEXT, length INTEGER, cnt INTEGER, PRIMARY KEY (col, length))"
+        )
 
         self.batch_size = 50000
         self.eid_batch: List[Tuple[str]] = []
@@ -333,6 +357,7 @@ class DiskBackedProfiler:
         self.addr_batch: List[Tuple[str]] = []
         self.record_batch: List[Tuple[str]] = []
         self.country_batch: List[Tuple[str]] = []
+        self.length_batch: List[Tuple[str, int]] = []
 
     def record_row(
         self,
@@ -360,12 +385,14 @@ class DiskBackedProfiler:
         if len(self.eid_batch) >= self.batch_size:
             self.flush()
 
+    def record_length(self, col: str, length: int) -> None:
+        self.length_batch.append((col, length))
+
     def flush(self) -> None:
         if self.eid_batch:
             try:
                 self.cur.executemany("INSERT INTO entity_ids VALUES (?)", self.eid_batch)
             except sqlite3.IntegrityError as e:
-                # Find the duplicate entity ID
                 for (eid,) in self.eid_batch:
                     self.cur.execute("SELECT eid FROM entity_ids WHERE eid = ?", (eid,))
                     if self.cur.fetchone():
@@ -403,7 +430,41 @@ class DiskBackedProfiler:
             )
             self.country_batch.clear()
 
+        if self.length_batch:
+            self.cur.executemany(
+                "INSERT INTO length_counts VALUES (?, ?, 1) ON CONFLICT(col, length) DO UPDATE SET cnt = cnt + 1",
+                self.length_batch,
+            )
+            self.length_batch.clear()
+
         self.con.commit()
+
+    def compute_length_quantiles(
+        self, col: str, total_count: int, percentiles: List[float]
+    ) -> Dict[str, int]:
+        """Compute exact quantiles directly from disk-backed SQLite length frequencies."""
+        self.flush()
+        if total_count == 0:
+            return {}
+
+        self.cur.execute(
+            "SELECT length, cnt FROM length_counts WHERE col = ? ORDER BY length", (col,)
+        )
+        rows = self.cur.fetchall()
+        targets = {p: max(1, math.ceil(total_count * p)) for p in percentiles}
+        sorted_targets = sorted(targets.items(), key=lambda x: x[1])
+        results = {}
+
+        cum = 0
+        t_idx = 0
+        for length, cnt in rows:
+            cum += cnt
+            while t_idx < len(sorted_targets) and cum >= sorted_targets[t_idx][1]:
+                p, _ = sorted_targets[t_idx]
+                results[f"p{int(p * 100)}"] = length
+                t_idx += 1
+
+        return results
 
     def get_duplicate_metrics(self) -> Dict[str, Any]:
         self.flush()
@@ -452,14 +513,16 @@ class DiskBackedProfiler:
 
 
 # ==============================================================================
-# Bounded Binned Quantile & Length Profiler
+# Bounded Length Profiler (No In-Memory Histogram)
 # ==============================================================================
 
 class LengthProfiler:
     """
-    Computes exact summary statistics (min, max, mean, quantiles) and maintains
-    bounded deterministic top-k shortest non-empty and longest string examples
-    in strictly bounded memory using an integer histogram of text lengths.
+    Maintains bounded deterministic summary statistics (min, max, count, sum)
+    and bounded top-k shortest non-empty and longest string examples in strictly
+    bounded O(1) in-memory storage.
+
+    Exact length distributions are stored on disk in DiskBackedProfiler.
     """
 
     def __init__(self, max_examples: int = 5):
@@ -467,12 +530,11 @@ class LengthProfiler:
         self.min_len: int = 0
         self.max_len: int = 0
         self.sum_len: int = 0
-        self.length_histogram: Counter[int] = Counter()
         self.max_examples: int = max_examples
         self.shortest_examples: List[Tuple[int, str, str]] = []
         self.longest_examples: List[Tuple[int, str, str]] = []
 
-    def update(self, val: str, entity_id: str) -> None:
+    def update(self, val: str, entity_id: str) -> int:
         length = len(val)
         if self.count == 0:
             self.min_len = length
@@ -485,7 +547,6 @@ class LengthProfiler:
 
         self.count += 1
         self.sum_len += length
-        self.length_histogram[length] += 1
 
         if length > 0:
             item = (length, val, entity_id)
@@ -504,38 +565,19 @@ class LengthProfiler:
             self.longest_examples[-1] = longest_item
             self.longest_examples.sort()
 
-    def get_summary(self) -> Dict[str, Any]:
+        return length
+
+    def get_summary(self, quantiles: Dict[str, int]) -> Dict[str, Any]:
         if self.count == 0:
             return {"min": 0, "max": 0, "mean": 0.0, "quantiles": {}}
 
         mean = round(self.sum_len / self.count, 2)
-        quantiles = self._compute_quantiles([0.25, 0.50, 0.75, 0.90, 0.95, 0.99])
-
         return {
             "min": self.min_len,
             "max": self.max_len,
             "mean": mean,
             "quantiles": quantiles,
         }
-
-    def _compute_quantiles(self, percentiles: List[float]) -> Dict[str, int]:
-        sorted_lens = sorted(self.length_histogram.keys())
-        targets = {p: int(self.count * p) for p in percentiles}
-        results = {}
-
-        cum = 0
-        sorted_targets = sorted(targets.items(), key=lambda x: x[1])
-        t_idx = 0
-
-        for length in sorted_lens:
-            cum += self.length_histogram[length]
-            while t_idx < len(sorted_targets) and cum >= sorted_targets[t_idx][1]:
-                p, _ = sorted_targets[t_idx]
-                p_label = f"p{int(p * 100)}"
-                results[p_label] = length
-                t_idx += 1
-
-        return results
 
     def get_examples(self) -> Dict[str, List[Dict[str, Any]]]:
         shortest = [
@@ -583,10 +625,9 @@ def validate_input_file(
     if not file_path.is_file():
         raise StructuralIntegrityError(str(file_path), 0, "Input file does not exist")
 
-    # Ephemeral SQLite database for entity_id uniqueness check
     scratch_dir = temp_dir or file_path.parent
     scratch_dir.mkdir(parents=True, exist_ok=True)
-    db_file = scratch_dir / f".val_{file_path.name}_{int(time.time()*1000)}.db"
+    db_file = scratch_dir / f".val_{file_path.name}_{int(time.time()*1000)}_{os.getpid()}.db"
     con = sqlite3.connect(str(db_file))
     cur = con.cursor()
     cur.execute("PRAGMA synchronous = OFF")
@@ -705,12 +746,12 @@ def clean_and_profile_file(
 
     Memory bounded:
     - Processes row-by-row with streaming I/O.
-    - Aggregates duplicate metrics and entity IDs via disk-backed SQLite tables.
-    - Text length histograms and examples use bounded O(1) in-memory storage.
+    - Aggregates duplicate metrics, entity IDs, and text length frequencies via disk-backed SQLite.
+    - Memory footprint is strictly bounded O(1).
     """
     staged_output_path.parent.mkdir(parents=True, exist_ok=True)
     scratch_dir = temp_dir or staged_output_path.parent
-    db_path = scratch_dir / f".prof_{input_path.name}_{int(time.time()*1000)}.db"
+    db_path = scratch_dir / f".prof_{input_path.name}_{int(time.time()*1000)}_{os.getpid()}.db"
     profiler = DiskBackedProfiler(db_path)
 
     row_count = 0
@@ -805,12 +846,19 @@ def clean_and_profile_file(
                 addr_norm = normalize_text(b_addr)
                 ctry_norm = normalize_country(country)
 
-                length_profilers["business_name"].update(b_name, entity_id)
-                length_profilers["business_address"].update(b_addr, entity_id)
-                length_profilers["country"].update(country, entity_id)
-                length_profilers["business_name_normalized"].update(name_norm, entity_id)
-                length_profilers["business_address_normalized"].update(addr_norm, entity_id)
-                length_profilers["country_normalized"].update(ctry_norm, entity_id)
+                len_b_name = length_profilers["business_name"].update(b_name, entity_id)
+                len_b_addr = length_profilers["business_address"].update(b_addr, entity_id)
+                len_country = length_profilers["country"].update(country, entity_id)
+                len_name_norm = length_profilers["business_name_normalized"].update(name_norm, entity_id)
+                len_addr_norm = length_profilers["business_address_normalized"].update(addr_norm, entity_id)
+                len_ctry_norm = length_profilers["country_normalized"].update(ctry_norm, entity_id)
+
+                profiler.record_length("business_name", len_b_name)
+                profiler.record_length("business_address", len_b_addr)
+                profiler.record_length("country", len_country)
+                profiler.record_length("business_name_normalized", len_name_norm)
+                profiler.record_length("business_address_normalized", len_addr_norm)
+                profiler.record_length("country_normalized", len_ctry_norm)
 
                 profiler.record_row(entity_id, name_norm, addr_norm, ctry_norm, country)
 
@@ -830,6 +878,13 @@ def clean_and_profile_file(
 
             out_f.flush()
             os.fsync(out_f.fileno())
+
+        # Compute quantiles from disk-backed SQLite length counts
+        percentiles = [0.25, 0.50, 0.75, 0.90, 0.95, 0.99]
+        text_length_summaries = {}
+        for col, lp in length_profilers.items():
+            quantiles = profiler.compute_length_quantiles(col, lp.count, percentiles)
+            text_length_summaries[col] = lp.get_summary(quantiles)
 
         dup_metrics = profiler.get_duplicate_metrics()
         country_counts = profiler.get_country_counts()
@@ -864,15 +919,17 @@ def clean_and_profile_file(
         "suspicious_symbol_counts": {
             k: dict(v) for k, v in suspicious_symbols.items()
         },
-        "text_length_summaries": {
-            col: lp.get_summary() for col, lp in length_profilers.items()
-        },
+        "text_length_summaries": text_length_summaries,
         "text_length_examples": {
             col: lp.get_examples() for col, lp in length_profilers.items()
         },
         "duplicate_looking_normalized_value_counts": dup_metrics,
-        "duplicate_entity_id_findings": [],
-        "malformed_row_findings": [],
+        "duplicate_entity_id_findings": {
+            "status": "none_detected_during_mandatory_validation"
+        },
+        "malformed_row_findings": {
+            "status": "none_detected_during_mandatory_validation"
+        },
         "country_frequency_counts": country_counts,
         "preservation_checks": {
             "row_order_and_ids_preserved": True,
@@ -1104,7 +1161,7 @@ def verify_file_quality(
 
 
 # ==============================================================================
-# Pipeline Coordinator with Generation Staging & Atomic Rollback
+# Pipeline Coordinator with Generation Staging & Rollback-Safe Transaction
 # ==============================================================================
 
 def run_cleaning_pipeline(
@@ -1112,14 +1169,14 @@ def run_cleaning_pipeline(
     output_dir: Path,
     splits: List[str],
     quiet: bool = False,
-    _inject_publication_error: bool = False,
+    _inject_failure_point: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Executes the complete cleaning pipeline:
     1. Mandatory structural integrity validation pass across all target files.
     2. Streaming cleaning and profiling to staged generation directory.
     3. Post-cleaning quality verification pass recomputing all derived values.
-    4. Atomic publication with automatic rollback on any replacement failure.
+    4. Rollback-safe multi-directory publication transaction.
 
     Returns:
         (profile_report, quality_report)
@@ -1133,6 +1190,8 @@ def run_cleaning_pipeline(
         print(f"Output Directory : {output_dir}")
         print(f"Splits to process: {splits}")
         print()
+
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Discover target files
     files_to_process: List[Tuple[str, Path, str]] = []
@@ -1271,6 +1330,7 @@ def run_cleaning_pipeline(
             "file_checks": quality_results,
         }
 
+        # Chunked SHA-256 calculation for manifest (never loads multi-GB file into RAM)
         manifest = {
             "generation_id": staging_dir.name,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -1278,7 +1338,7 @@ def run_cleaning_pipeline(
             "files": {
                 f"{split}/{in_p.name}": {
                     "rows": profile_results[f"{split}/{in_p.name}"]["row_count"],
-                    "sha256": hashlib.sha256(staged_p.read_bytes()).hexdigest(),
+                    "sha256": sha256_file(staged_p),
                 }
                 for split, in_p, staged_p, _ in staged_files
             },
@@ -1303,20 +1363,17 @@ def run_cleaning_pipeline(
             f.flush()
             os.fsync(f.fileno())
 
-        # Phase 5: Atomic Rollback-Safe Publication
+        # Phase 5: Rollback-Safe Multi-Directory Publication Transaction
         if not quiet:
-            print(">>> Phase 4: Atomic Publication with Rollback Protection...")
-
-        # Injected publication error for test coverage if requested
-        if _inject_publication_error:
-            raise OSError("Injected publication failure for test verification")
+            print(">>> Phase 4: Rollback-Safe Multi-Directory Publication Transaction...")
 
         backup_dir = output_dir / f".backup_{int(time.time()*1000)}_{os.getpid()}"
         published_items = ["train", "test", "reports"]
         backed_up: List[Tuple[Path, Path]] = []
+        moved_to_dest: List[Tuple[Path, Path]] = []
 
         try:
-            # Backup existing destination directories
+            # Step 1: Back up existing destination directories
             for item in published_items:
                 target_path = output_dir / item
                 if target_path.exists():
@@ -1325,25 +1382,33 @@ def run_cleaning_pipeline(
                     shutil.move(str(target_path), str(dest_backup))
                     backed_up.append((dest_backup, target_path))
 
-            # Move staged generation into final destination
+                    if _inject_failure_point == "after_one_backup" and len(backed_up) == 1:
+                        raise PublicationTransactionError("Injected failure after one destination directory backup")
+
+            # Step 2: Publish staged directories to destination
             for item in published_items:
                 src_path = staging_dir / item
                 if src_path.exists():
                     target_path = output_dir / item
                     shutil.move(str(src_path), str(target_path))
+                    moved_to_dest.append((src_path, target_path))
 
-            # Success: clean up backup
+                    if _inject_failure_point == "after_one_publish" and len(moved_to_dest) == 1:
+                        raise PublicationTransactionError("Injected failure after one staged directory published")
+                    if _inject_failure_point == "after_two_publish" and len(moved_to_dest) == 2:
+                        raise PublicationTransactionError("Injected failure after two staged directories published")
+
+            # Step 3: Transaction committed successfully -> clean up backup
             if backup_dir.exists():
                 shutil.rmtree(backup_dir, ignore_errors=True)
 
         except Exception as pub_err:
-            # Rollback: restore backed up items
+            # Transaction Rollback
             if not quiet:
                 print(f"  [ROLLBACK] Publication error: {pub_err}. Restoring previous state...", file=sys.stderr)
-            for item in published_items:
-                partially_published = output_dir / item
-                if partially_published.exists():
-                    shutil.rmtree(partially_published, ignore_errors=True)
+            for _, target_path in moved_to_dest:
+                if target_path.exists():
+                    shutil.rmtree(target_path, ignore_errors=True)
 
             for dest_backup, target_path in backed_up:
                 if dest_backup.exists():
@@ -1351,6 +1416,10 @@ def run_cleaning_pipeline(
 
             if backup_dir.exists():
                 shutil.rmtree(backup_dir, ignore_errors=True)
+
+            if staging_dir.exists():
+                shutil.rmtree(staging_dir, ignore_errors=True)
+
             raise pub_err
 
         # Clean up staging directory
@@ -1362,13 +1431,13 @@ def run_cleaning_pipeline(
             print(f"  Published: {output_dir / 'test'}")
             print(f"  Published: {output_dir / 'reports' / 'profile.json'}")
             print(f"  Published: {output_dir / 'reports' / 'quality_checks.json'}")
+            print(f"  Published: {output_dir / 'reports' / 'manifest.json'}")
             print(f"\nPipeline completed successfully in {time.time()-start_time:.2f}s!")
             print("=" * 80)
 
         return profile_report, quality_report
 
     except Exception:
-        # Guarantee no partial staging remains on failure
         if staging_dir.exists():
             shutil.rmtree(staging_dir, ignore_errors=True)
         raise
@@ -1430,6 +1499,9 @@ def main() -> int:
         print(f"\n[FATAL ERROR] Quality check failure [{e.check_name}]:", file=sys.stderr)
         print(f"  File: {e.file_path}", file=sys.stderr)
         print(f"  Reason: {e.reason}", file=sys.stderr)
+        return 1
+    except PublicationTransactionError as e:
+        print(f"\n[FATAL ERROR] Publication transaction failure (rolled back): {e}", file=sys.stderr)
         return 1
     except Exception as e:
         print(f"\n[FATAL ERROR] Pipeline failed: {e}", file=sys.stderr)

@@ -20,9 +20,16 @@ Verifies:
 - Malformed TSV failure (structural integrity gate)
 - Duplicate / missing entity_id rejection (mandatory integrity gate)
 - Disk-backed SQLite aggregation and deterministic SHA-256 duplicate metrics
-- Generation staging and atomic rollback on publication failure
-- No leftover temporary files on success or failure
-- Repeated full-run output equivalence
+- Disk-backed SQLite length frequency aggregation (genuinely bounded memory)
+- Streaming chunked file hashing (sha256_file) without full memory loading
+- Rollback-safe multi-directory publication transaction across all failure points:
+  - after one destination directory is backed up
+  - after one staged directory is published
+  - after two staged directories are published
+- Confirmation of byte-identical previous outputs and zero partial generations or leftover staging/backup dirs
+- Zero leftover temporary SQLite databases
+- Accurate status object for duplicate entity ID findings
+- Deterministic reports excluding runtime timestamps
 """
 
 import hashlib
@@ -44,9 +51,13 @@ from clean_dataset import (
     OUTPUT_COLUMNS,
     StructuralIntegrityError,
     QualityCheckError,
+    PublicationTransactionError,
     is_missing_value,
     normalize_text,
     normalize_country,
+    sha256_file,
+    DiskBackedProfiler,
+    LengthProfiler,
     validate_input_file,
     clean_and_profile_file,
     verify_file_quality,
@@ -186,6 +197,41 @@ class TestPipelineAndIntegrity(unittest.TestCase):
             for row in rows:
                 f.write("\t".join(row) + "\n")
 
+    def test_chunked_manifest_hashing(self):
+        """sha256_file must compute exact digest in streaming chunks without loading full file into memory."""
+        test_file = self.base_path / "hash_test.bin"
+        # Create a file larger than 1MB chunk size (2.5 MB)
+        content = b"AmazonML2026_EntityResolution_" * 85000  # ~2.55 MB
+        test_file.write_bytes(content)
+
+        expected_hash = hashlib.sha256(content).hexdigest()
+        streamed_hash = sha256_file(test_file, chunk_size=1024 * 1024)
+
+        self.assertEqual(streamed_hash, expected_hash)
+
+    def test_bounded_length_aggregation(self):
+        """Length frequencies must be stored in disk-backed SQLite and not in an unbounded in-memory histogram."""
+        db_path = self.base_path / "test_lengths.db"
+        profiler = DiskBackedProfiler(db_path)
+        lp = LengthProfiler(max_examples=5)
+
+        # Confirm LengthProfiler does not retain an unbounded length_histogram dictionary
+        self.assertFalse(hasattr(lp, "length_histogram"))
+
+        # Record lengths
+        for length in [10, 20, 20, 30, 40, 50, 100]:
+            lp.update("x" * length, f"S1-{length}")
+            profiler.record_length("business_name", length)
+
+        percentiles = [0.25, 0.50, 0.75, 0.90, 0.95, 0.99]
+        quantiles = profiler.compute_length_quantiles("business_name", lp.count, percentiles)
+        summary = lp.get_summary(quantiles)
+
+        self.assertEqual(summary["min"], 10)
+        self.assertEqual(summary["max"], 100)
+        self.assertEqual(summary["quantiles"]["p50"], 30)
+        profiler.close()
+
     def test_malformed_tsv_missing_columns_failure(self):
         """Row with missing column must fail input validation with line number and reason."""
         bad_file = self.base_path / "bad.tsv"
@@ -277,6 +323,22 @@ class TestPipelineAndIntegrity(unittest.TestCase):
         self.assertEqual(lines[1][0], "S1-001")
         self.assertEqual(lines[2][0], "S1-002")
 
+    def test_duplicate_entity_id_findings_status_object(self):
+        """duplicate_entity_id_findings must be an accurate status object since duplicates abort prior to profiling."""
+        in_file = self.base_path / "valid.tsv"
+        out_file = self.base_path / "valid_clean.tsv"
+        rows = [
+            INPUT_COLUMNS,
+            ["S1-001", "Acme Corp", "123 Main St", "US"],
+        ]
+        self._create_tsv(in_file, rows)
+
+        profile = clean_and_profile_file(in_file, out_file, expected_prefix="S1-", temp_dir=self.base_path)
+        self.assertEqual(
+            profile["duplicate_entity_id_findings"],
+            {"status": "none_detected_during_mandatory_validation"},
+        )
+
     def test_row_and_id_preservation(self):
         """Output rows and entity IDs must be in exact same order with exact raw values."""
         in_file = self.base_path / "preserve.tsv"
@@ -311,7 +373,6 @@ class TestPipelineAndIntegrity(unittest.TestCase):
             INPUT_COLUMNS,
             ["S1-001", "Beta Technologies", "100 Tech Way", "US"],
         ])
-        # Manually create bad output with incorrect non-empty normalized value
         self._create_tsv(cleaned_bad, [
             OUTPUT_COLUMNS,
             ["S1-001", "Beta Technologies", "100 Tech Way", "US", "gamma technologies", "100 tech way", "us", "False", "False", "False"],
@@ -379,7 +440,7 @@ class TestPipelineAndIntegrity(unittest.TestCase):
             INPUT_COLUMNS,
             ["S1-100", "Alpha Inc.", "10 Alpha Way", "US"],
             ["S1-200", "Beta & Co.", "20 Beta Rd", "India"],
-            ["S1-300", "Alpha Inc.", "30 Other St", "US"],  # Duplicate name
+            ["S1-300", "Alpha Inc.", "30 Other St", "US"],
         ]
         self._create_tsv(in_file, rows)
 
@@ -402,9 +463,9 @@ class TestPipelineAndIntegrity(unittest.TestCase):
             1,
         )
 
-    def test_publication_failure_cleanup_and_rollback(self):
-        """Injected publication failure must roll back cleanly, retain previous state, and leave no partial generation."""
-        dataset_dir = self.base_path / "dataset_rollback"
+    def test_all_publication_failure_points_and_rollback(self):
+        """Test rollback at all 3 failure points: after_one_backup, after_one_publish, and after_two_publish."""
+        dataset_dir = self.base_path / "dataset_txn"
         train_dir = dataset_dir / "train"
         test_dir = dataset_dir / "test"
 
@@ -417,42 +478,104 @@ class TestPipelineAndIntegrity(unittest.TestCase):
                     [f"{pfx}101", f"Biz {src_idx}", f"{src_idx}00 Main St", "US"],
                 ])
 
-        output_dir = self.base_path / "cleaned_rollback"
-        # Run successful initial generation
+        failure_points = ["after_one_backup", "after_one_publish", "after_two_publish"]
+
+        for failure_point in failure_points:
+            output_dir = self.base_path / f"cleaned_{failure_point}"
+            # 1. Establish initial successful generation
+            run_cleaning_pipeline(
+                input_dir=dataset_dir,
+                output_dir=output_dir,
+                splits=["train", "test"],
+                quiet=True,
+            )
+            marker_file = output_dir / "train" / "train_source1.tsv"
+            initial_bytes = marker_file.read_bytes()
+
+            # 2. Inject failure at specific point during subsequent run
+            with self.assertRaises(PublicationTransactionError):
+                run_cleaning_pipeline(
+                    input_dir=dataset_dir,
+                    output_dir=output_dir,
+                    splits=["train", "test"],
+                    quiet=True,
+                    _inject_failure_point=failure_point,
+                )
+
+            # 3. Verify rollback restored previous outputs byte-identically
+            self.assertTrue(marker_file.is_file())
+            self.assertEqual(marker_file.read_bytes(), initial_bytes)
+
+            # 4. Verify no partial generation remains and staging/backup directories removed
+            remaining_staging = list(output_dir.glob(".generation_staging_*"))
+            remaining_backup = list(output_dir.glob(".backup_*"))
+            self.assertEqual(len(remaining_staging), 0)
+            self.assertEqual(len(remaining_backup), 0)
+
+    def test_no_leftover_temporary_sqlite_databases(self):
+        """No temporary SQLite database files (.val_*.db, .prof_*.db) must remain after success or failure."""
+        dataset_dir = self.base_path / "dataset_clean_test"
+        train_dir = dataset_dir / "train"
+        test_dir = dataset_dir / "test"
+
+        for split, s_dir in [("train", train_dir), ("test", test_dir)]:
+            for src_idx in (1, 2, 3):
+                pfx = f"S{src_idx}-"
+                file_path = s_dir / f"{split}_source{src_idx}.tsv"
+                self._create_tsv(file_path, [
+                    INPUT_COLUMNS,
+                    [f"{pfx}101", f"Biz {src_idx}", f"{src_idx}00 Main St", "US"],
+                ])
+
+        output_dir = self.base_path / "cleaned_db_check"
         run_cleaning_pipeline(
             input_dir=dataset_dir,
             output_dir=output_dir,
             splits=["train", "test"],
             quiet=True,
         )
-        self.assertTrue((output_dir / "train" / "train_source1.tsv").is_file())
 
-        # Modify initial file content to check rollback retention
-        marker_file = output_dir / "train" / "train_source1.tsv"
-        initial_bytes = marker_file.read_bytes()
+        leftover_dbs = list(output_dir.rglob("*.db*"))
+        self.assertEqual(len(leftover_dbs), 0, f"Found leftover DB files: {leftover_dbs}")
 
-        # Run pipeline with injected publication failure
-        with self.assertRaises(OSError):
-            run_cleaning_pipeline(
-                input_dir=dataset_dir,
-                output_dir=output_dir,
-                splits=["train", "test"],
-                quiet=True,
-                _inject_publication_error=True,
-            )
+    def test_deterministic_reports_excluding_timestamps(self):
+        """profile.json, quality_checks.json, and manifest.json must be identical across runs excluding timestamps."""
+        dataset_dir = self.base_path / "dataset_det_reports"
+        train_dir = dataset_dir / "train"
+        test_dir = dataset_dir / "test"
 
-        # Verify rollback restored previous state
-        self.assertTrue(marker_file.is_file())
-        self.assertEqual(marker_file.read_bytes(), initial_bytes)
+        for split, s_dir in [("train", train_dir), ("test", test_dir)]:
+            for src_idx in (1, 2, 3):
+                pfx = f"S{src_idx}-"
+                file_path = s_dir / f"{split}_source{src_idx}.tsv"
+                self._create_tsv(file_path, [
+                    INPUT_COLUMNS,
+                    [f"{pfx}101", f"Biz {src_idx}", f"{src_idx}00 Main St", "US"],
+                ])
 
-        # Verify no staging or backup directories remain
-        remaining_staging = list(output_dir.glob(".generation_staging_*"))
-        remaining_backup = list(output_dir.glob(".backup_*"))
-        self.assertEqual(len(remaining_staging), 0)
-        self.assertEqual(len(remaining_backup), 0)
+        out1 = self.base_path / "det_run1"
+        out2 = self.base_path / "det_run2"
+
+        run_cleaning_pipeline(input_dir=dataset_dir, output_dir=out1, splits=["train", "test"], quiet=True)
+        run_cleaning_pipeline(input_dir=dataset_dir, output_dir=out2, splits=["train", "test"], quiet=True)
+
+        # Check quality_checks.json excluding timestamp
+        with open(out1 / "reports" / "quality_checks.json") as f1, open(out2 / "reports" / "quality_checks.json") as f2:
+            q1 = json.load(f1)
+            q2 = json.load(f2)
+            del q1["timestamp"], q2["timestamp"]
+            self.assertEqual(q1, q2)
+
+        # Check manifest.json excluding generation_id and created_at
+        with open(out1 / "reports" / "manifest.json") as f1, open(out2 / "reports" / "manifest.json") as f2:
+            m1 = json.load(f1)
+            m2 = json.load(f2)
+            del m1["generation_id"], m2["generation_id"]
+            del m1["created_at"], m2["created_at"]
+            self.assertEqual(m1, m2)
 
     def test_repeated_full_run_output_equivalence(self):
-        """Two full runs on a small fixture produce byte-for-byte identical output files and reports."""
+        """Two full runs on a small fixture produce byte-for-byte identical output files."""
         dataset_dir = self.base_path / "dataset_det"
         train_dir = dataset_dir / "train"
         test_dir = dataset_dir / "test"

@@ -179,9 +179,10 @@ Only clearly safe, explicitly documented equivalences are mapped in derived fiel
 
 ### Actual Memory Model
 - **Streaming Row Transformation**: Streaming row-by-row reading and writing with bounded I/O buffers.
-- **Disk-Backed SQLite Aggregation**: Uniqueness validation and duplicate profiling are offloaded to ephemeral SQLite databases on disk with small fixed page cache (`PRAGMA cache_size = -4000`, ~4MB RAM).
+- **Disk-Backed SQLite Aggregation**: Uniqueness validation, duplicate profiling, and length frequency distributions are offloaded to ephemeral SQLite databases on disk with small fixed page cache (`PRAGMA cache_size = -4000`, ~4MB RAM).
+- **True Bounded-Memory Aggregations**: Length distributions are stored and aggregated via disk-backed SQLite frequency tables rather than unbounded in-memory dictionaries or Counters, enabling exact quantile calculation (p25, p50, p75, p90, p95, p99) with strictly bounded memory.
+- **Chunked Manifest Hashing**: All file digests in `manifest.json` are computed using streaming 1MB chunks (`sha256_file`), never loading multi-gigabyte TSVs into memory.
 - **Collision-Resistant Deterministic Digests**: Duplicate metrics are calculated using deterministic SHA-256 digests (`hashlib.sha256`) rather than process-randomized Python `hash()`.
-- **Bounded In-Memory Summaries**: Text length distributions are tracked in an integer histogram bounded by observed text length, allowing exact quantile computation (p25, p50, p75, p90, p95, p99) in minimal RAM (~50KB).
 
 ### Multi-Tier Gatekeeper & Failure-Safe Publication
 ```
@@ -218,11 +219,12 @@ Phase 3: Post-Cleaning Quality Check Gate
      12. boolean_flags_valid
        │
        ▼
-Phase 4: Atomic Publication with Rollback Protection
-  ├── Stages reports/profile.json, reports/quality_checks.json, manifest.json
-  ├── Backs up existing target directories
-  ├── Replaces destination with staged generation
-  └── In case of any publication error, restores previous generation automatically
+Phase 4: Rollback-Safe Multi-Directory Publication Transaction
+  ├── Stages reports/profile.json, reports/quality_checks.json, reports/manifest.json
+  ├── Step 1: Backs up existing target directories
+  ├── Step 2: Publishes staged directories to destination
+  ├── Step 3: On success, removes backups and staging
+  └── On any failure, automatically rolls back restored state byte-identically
 ```
 
 If any invariant fails:
@@ -241,13 +243,13 @@ The profiling report (`cleaned/reports/profile.json`) summarizes dataset charact
 - **Missing & Empty Counts**: Missing counts (including BOM/zero-width space) and empty-string counts.
 - **Unicode & Script Indicators**: Non-ASCII counts, character category breakdowns (Latin, Latin-Extended, Devanagari, Arabic, Cyrillic, CJK, etc.).
 - **Suspicious Symbols**: Control character counts, replacement character (`\uFFFD`) occurrences, private use codepoints.
-- **Text Length Summaries**: Exact min, max, mean, and quantiles (p25, p50, p75, p90, p95, p99) computed via bounded integer histograms.
+- **Text Length Summaries**: Exact min, max, mean, and quantiles (p25, p50, p75, p90, p95, p99) computed via disk-backed SQLite length frequencies.
 - **Deterministic Examples**: Bounded top-5 shortest non-empty and top-5 longest examples per field.
 - **Duplicate Metrics (SHA-256)**:
   - Unique normalized names with >1 occurrences and total duplicate rows.
   - Unique normalized addresses with >1 occurrences and total duplicate rows.
   - Unique full normalized tuples `(name, address, country)` with >1 occurrences.
-- **Integrity Findings**: Confirmation of duplicate entity IDs (`[]`) and malformed rows (`[]`).
+- **Integrity Findings**: Confirmation of duplicate entity IDs (`{"status": "none_detected_during_mandatory_validation"}`) and malformed rows (`{"status": "none_detected_during_mandatory_validation"}`).
 - **Country Distribution**: Frequency counts for each observed country label.
 - **Preservation Verification**: Explicit verification flags confirming row count, order, IDs, and raw fields were preserved.
 
