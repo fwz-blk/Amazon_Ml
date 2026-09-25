@@ -1,0 +1,153 @@
+{
+  "title": "Amazon ML Challenge 2026 - Data Quality & Invariant Verification Report",
+  "timestamp": "2026-09-25T15:53:55.447615+00:00",
+  "status": "PASSED",
+  "summary": {
+    "total_files_checked": 6,
+    "total_rows_checked": 24229173,
+    "total_invariants_per_file": 12,
+    "all_checks_passed": true
+  },
+  "invariants_checked": [
+    "row_count_match",
+    "entity_id_match_and_order",
+    "original_values_unaltered",
+    "source_columns_present",
+    "no_unexpected_nulls",
+    "normalized_missing_not_fabricated",
+    "output_headers_correct",
+    "valid_utf8_tsv",
+    "no_malformed_rows",
+    "normalized_columns_present",
+    "source_prefix_validation",
+    "boolean_flags_valid"
+  ],
+  "file_checks": {
+    "train/train_source1.tsv": {
+      "file_name": "train_source1.tsv",
+      "status": "PASSED",
+      "input_rows": 2206821,
+      "output_rows": 2206821,
+      "invariants": {
+        "row_count_match": true,
+        "entity_id_match_and_order": true,
+        "original_values_unaltered": true,
+        "source_columns_present": true,
+        "no_unexpected_nulls": true,
+        "normalized_missing_not_fabricated": true,
+        "output_headers_correct": true,
+        "valid_utf8_tsv": true,
+        "no_malformed_rows": true,
+        "normalized_columns_present": true,
+        "source_prefix_validation": true,
+        "boolean_flags_valid": true
+      },
+      "errors": []
+    },
+    "train/train_source2.tsv": {
+      "file_name": "train_source2.tsv",
+      "status": "PASSED",
+      "input_rows": 5034616,
+      "output_rows": 5034616,
+      "invariants": {
+        "row_count_match": true,
+        "entity_id_match_and_order": true,
+        "original_values_unaltered": true,
+        "source_columns_present": true,
+        "no_unexpected_nulls": true,
+        "normalized_missing_not_fabricated": true,
+        "output_headers_correct": true,
+        "valid_utf8_tsv": true,
+        "no_malformed_rows": true,
+        "normalized_columns_present": true,
+        "source_prefix_validation": true,
+        "boolean_flags_valid": true
+      },
+      "errors": []
+    },
+    "train/train_source3.tsv": {
+      "file_name": "train_source3.tsv",
+      "status": "PASSED",
+      "input_rows": 5285603,
+      "output_rows": 5285603,
+      "invariants": {
+        "row_count_match": true,
+        "entity_id_match_and_order": true,
+        "original_values_unaltered": true,
+        "source_columns_present": true,
+        "no_unexpected_nulls": true,
+        "normalized_missing_not_fabricated": true,
+        "output_headers_correct": true,
+        "valid_utf8_tsv": true,
+        "no_malformed_rows": true,
+        "normalized_columns_present": true,
+        "source_prefix_validation": true,
+        "boolean_flags_valid": true
+      },
+      "errors": []
+    },
+    "test/test_source1.tsv": {
+      "file_name": "test_source1.tsv",
+      "status": "PASSED",
+      "input_rows": 1732544,
+      "output_rows": 1732544,
+      "invariants": {
+        "row_count_match": true,
+        "entity_id_match_and_order": true,
+        "original_values_unaltered": true,
+        "source_columns_present": true,
+        "no_unexpected_nulls": true,
+        "normalized_missing_not_fabricated": true,
+        "output_headers_correct": true,
+        "valid_utf8_tsv": true,
+        "no_malformed_rows": true,
+        "normalized_columns_present": true,
+        "source_prefix_validation": true,
+        "boolean_flags_valid": true
+      },
+      "errors": []
+    },
+    "test/test_source2.tsv": {
+      "file_name": "test_source2.tsv",
+      "status": "PASSED",
+      "input_rows": 4887273,
+      "output_rows": 4887273,
+      "invariants": {
+        "row_count_match": true,
+        "entity_id_match_and_order": true,
+        "original_values_unaltered": true,
+        "source_columns_present": true,
+        "no_unexpected_nulls": true,
+        "normalized_missing_not_fabricated": true,
+        "output_headers_correct": true,
+        "valid_utf8_tsv": true,
+        "no_malformed_rows": true,
+        "normalized_columns_present": true,
+        "source_prefix_validation": true,
+        "boolean_flags_valid": true
+      },
+      "errors": []
+    },
+    "test/test_source3.tsv": {
+      "file_name": "test_source3.tsv",
+      "status": "PASSED",
+      "input_rows": 5082316,
+      "output_rows": 5082316,
+      "invariants": {
+        "row_count_match": true,
+        "entity_id_match_and_order": true,
+        "original_values_unaltered": true,
+        "source_columns_present": true,
+        "no_unexpected_nulls": true,
+        "normalized_missing_not_fabricated": true,
+        "output_headers_correct": true,
+        "valid_utf8_tsv": true,
+        "no_malformed_rows": true,
+        "normalized_columns_present": true,
+        "source_prefix_validation": true,
+        "boolean_flags_valid": true
+      },
+      "errors": []
+    }
+  }
+}

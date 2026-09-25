@@ -1,0 +1,10 @@
+# Generated dataset artifacts (multi-gigabyte files)
+cleaned/train/
+cleaned/test/
+cleaned/**/*.tsv
+cleaned/**/.tmp_*
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class

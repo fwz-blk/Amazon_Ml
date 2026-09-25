@@ -1,0 +1,402 @@
+#!/usr/bin/env python3
+"""
+Unit and Integration Tests for Amazon ML Challenge 2026 Data Cleaning Pipeline.
+
+Verifies:
+- Unicode preservation (accents, non-Latin scripts)
+- Hindi/non-Latin text preservation (no transliteration, no translation)
+- Unicode-aware casefolding
+- NFC normalization
+- Whitespace and embedded tab/newline noise handling
+- Punctuation preservation (meaningful punctuation preserved, safe equivalences mapped)
+- Missing fields handling (empty string, boolean flags, no placeholders)
+- Duplicate-looking records remaining present
+- Repeated business-name words remaining unchanged
+- Malformed TSV failure (structural integrity gate)
+- Duplicate / missing entity_id failure
+- Row and ID preservation
+- Deterministic output
+"""
+
+import json
+import os
+import shutil
+import tempfile
+import unittest
+from pathlib import Path
+
+# Add src to path
+import sys
+SRC_DIR = Path(__file__).resolve().parent.parent / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from clean_dataset import (
+    INPUT_COLUMNS,
+    OUTPUT_COLUMNS,
+    StructuralIntegrityError,
+    QualityCheckError,
+    is_missing_value,
+    normalize_text,
+    normalize_country,
+    validate_input_file,
+    clean_and_profile_file,
+    verify_file_quality,
+    run_cleaning_pipeline,
+)
+
+
+class TestNormalization(unittest.TestCase):
+    """Test conservative text and country normalization rules."""
+
+    def test_unicode_preservation(self):
+        """Accents and European Unicode characters must be preserved, not converted to ASCII."""
+        raw = "Café L'Étoile & München Bräuhaus"
+        norm = normalize_text(raw)
+        # Lowercased, accents preserved, & preserved
+        self.assertEqual(norm, "café l'étoile & münchen bräuhaus")
+        self.assertIn("é", norm)
+        self.assertIn("ü", norm)
+        self.assertIn("ä", norm)
+
+    def test_hindi_non_latin_text(self):
+        """Hindi / Devanagari and other non-Latin scripts must be preserved byte-for-byte in Unicode."""
+        hindi_name = "राम मार्केटिंग प्राइवेट लिमिटेड"
+        norm = normalize_text(hindi_name)
+        self.assertEqual(norm, hindi_name)
+
+        hindi_addr = "G-3/571, GULMOHAR COLONY, BHOPAL, Madhya Pradesh"
+        norm_addr = normalize_text(hindi_addr)
+        self.assertEqual(norm_addr, "g-3/571, gulmohar colony, bhopal, madhya pradesh")
+
+        arabic_text = "شركة النور للتجارة"
+        self.assertEqual(normalize_text(arabic_text), arabic_text)
+
+        cjk_text = "トヨタ自動車株式会社"
+        self.assertEqual(normalize_text(cjk_text), cjk_text)
+
+        cyrillic_text = "ООО Ромашка Плюс"
+        self.assertEqual(normalize_text(cyrillic_text), "ооо ромашка плюс")
+
+    def test_casefolding(self):
+        """Unicode-aware casefolding must properly lower-case text."""
+        # German sharp s
+        self.assertEqual(normalize_text("WEISS STRASSE"), "weiss strasse")
+        self.assertEqual(normalize_text("Maße"), "masse")
+        # Mixed case
+        self.assertEqual(normalize_text("B+ Retail Inc"), "b+ retail inc")
+
+    def test_nfc_normalization(self):
+        """Decomposed characters (NFD) must be normalized to canonical composed form (NFC)."""
+        # 'e' + combining acute accent U+0301 (NFD)
+        nfd_str = "e\u0301cole"
+        nfc_str = "école"
+        self.assertNotEqual(nfd_str, nfc_str)
+        self.assertEqual(normalize_text(nfd_str), nfc_str)
+
+    def test_whitespace_and_embedded_noise(self):
+        """Unicode whitespace, tabs, and embedded newlines must collapse to single space and strip."""
+        raw = "\t  Acme   \r\n   Logistics \u00A0 \u2003  LLC \t\n"
+        norm = normalize_text(raw)
+        self.assertEqual(norm, "acme logistics llc")
+
+    def test_punctuation_preservation(self):
+        """Safe equivalences must map, while meaningful punctuation is strictly preserved."""
+        # Curly quotes -> straight quotes
+        raw_quotes = "“Bob’s” ‘Best’ „Bakery‟"
+        self.assertEqual(normalize_text(raw_quotes), '"bob\'s" \'best\' "bakery"')
+
+        # Unicode dashes -> ASCII hyphen
+        raw_dashes = "A–B—C−D‐E‑F"
+        self.assertEqual(normalize_text(raw_dashes), "a-b-c-d-e-f")
+
+        # Meaningful punctuation must NOT be removed globally
+        meaningful = "B & M / Smith . # 42 , (North-West) + co @ domain"
+        norm = normalize_text(meaningful)
+        self.assertIn("&", norm)
+        self.assertIn("/", norm)
+        self.assertIn(".", norm)
+        self.assertIn("#", norm)
+        self.assertIn(",", norm)
+        self.assertIn("(", norm)
+        self.assertIn(")", norm)
+        self.assertIn("+", norm)
+        self.assertIn("@", norm)
+        self.assertIn("-", norm)
+
+    def test_country_normalization(self):
+        """Country normalization uses only NFC + casefold() + whitespace normalization."""
+        self.assertEqual(normalize_country("  US  "), "us")
+        self.assertEqual(normalize_country("India"), "india")
+        self.assertEqual(normalize_country("France"), "france")
+        self.assertEqual(normalize_country(""), "")
+        self.assertEqual(normalize_country("   "), "")
+        self.assertEqual(normalize_country(None), "")
+
+    def test_missing_fields(self):
+        """Missing fields (empty string or whitespace-only) must return empty string and flag as missing."""
+        self.assertTrue(is_missing_value(""))
+        self.assertTrue(is_missing_value("   "))
+        self.assertTrue(is_missing_value("\t\r\n "))
+        self.assertTrue(is_missing_value(None))
+        self.assertFalse(is_missing_value("US"))
+        self.assertFalse(is_missing_value(" . "))
+
+        self.assertEqual(normalize_text(""), "")
+        self.assertEqual(normalize_text("   "), "")
+        self.assertEqual(normalize_text("\t\n"), "")
+
+    def test_repeated_business_name_words_unchanged(self):
+        """Repeated tokens, legal suffixes, and abbreviations must remain intact."""
+        raw = "Pizza Pizza Inc"
+        self.assertEqual(normalize_text(raw), "pizza pizza inc")
+
+        raw2 = "Apex Apex Global Ltd Corp"
+        self.assertEqual(normalize_text(raw2), "apex apex global ltd corp")
+
+
+class TestPipelineAndIntegrity(unittest.TestCase):
+    """Test input validation, streaming cleaner, and quality checks."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.base_path = Path(self.temp_dir)
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _create_tsv(self, file_path: Path, rows: list):
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(file_path, "w", encoding="utf-8", newline="\n") as f:
+            for row in rows:
+                f.write("\t".join(row) + "\n")
+
+    def test_malformed_tsv_missing_columns_failure(self):
+        """Row with missing column must fail input validation with line number and reason."""
+        bad_file = self.base_path / "bad.tsv"
+        rows = [
+            INPUT_COLUMNS,
+            ["S1-001", "Acme Corp", "123 Main St", "US"],
+            ["S1-002", "Bad Row", "Missing Country"],  # Only 3 columns!
+        ]
+        self._create_tsv(bad_file, rows)
+
+        with self.assertRaises(StructuralIntegrityError) as ctx:
+            validate_input_file(bad_file, expected_prefix="S1-")
+        self.assertEqual(ctx.exception.line_number, 3)
+        self.assertIn("4 tab-delimited columns", ctx.exception.reason)
+
+    def test_malformed_tsv_extra_columns_failure(self):
+        """Row with extra column must fail input validation with line number."""
+        bad_file = self.base_path / "extra.tsv"
+        rows = [
+            INPUT_COLUMNS,
+            ["S1-001", "Acme Corp", "123 Main St", "US", "Extra Col"],
+        ]
+        self._create_tsv(bad_file, rows)
+
+        with self.assertRaises(StructuralIntegrityError) as ctx:
+            validate_input_file(bad_file, expected_prefix="S1-")
+        self.assertEqual(ctx.exception.line_number, 2)
+        self.assertIn("expected 4", ctx.exception.reason)
+
+    def test_duplicate_entity_id_failure(self):
+        """Duplicate entity_id must fail validation."""
+        bad_file = self.base_path / "dup_id.tsv"
+        rows = [
+            INPUT_COLUMNS,
+            ["S1-001", "Acme Corp", "123 Main St", "US"],
+            ["S1-001", "Another Corp", "456 Other Rd", "US"],  # Duplicate ID
+        ]
+        self._create_tsv(bad_file, rows)
+
+        with self.assertRaises(StructuralIntegrityError) as ctx:
+            validate_input_file(bad_file, expected_prefix="S1-")
+        self.assertEqual(ctx.exception.line_number, 3)
+        self.assertIn("Duplicate entity_id", ctx.exception.reason)
+
+    def test_missing_entity_id_failure(self):
+        """Empty entity_id must fail validation."""
+        bad_file = self.base_path / "empty_id.tsv"
+        rows = [
+            INPUT_COLUMNS,
+            ["", "Acme Corp", "123 Main St", "US"],
+        ]
+        self._create_tsv(bad_file, rows)
+
+        with self.assertRaises(StructuralIntegrityError) as ctx:
+            validate_input_file(bad_file, expected_prefix="S1-")
+        self.assertEqual(ctx.exception.line_number, 2)
+        self.assertIn("Empty or whitespace-only entity_id", ctx.exception.reason)
+
+    def test_inconsistent_prefix_failure(self):
+        """Entity ID with incorrect prefix must fail validation."""
+        bad_file = self.base_path / "bad_prefix.tsv"
+        rows = [
+            INPUT_COLUMNS,
+            ["S2-001", "Acme Corp", "123 Main St", "US"],  # Expected S1-!
+        ]
+        self._create_tsv(bad_file, rows)
+
+        with self.assertRaises(StructuralIntegrityError) as ctx:
+            validate_input_file(bad_file, expected_prefix="S1-")
+        self.assertEqual(ctx.exception.line_number, 2)
+        self.assertIn("Inconsistent entity_id prefix", ctx.exception.reason)
+
+    def test_duplicate_looking_records_remaining_present(self):
+        """Duplicate-looking records must NOT be removed or deduplicated."""
+        in_file = self.base_path / "dups.tsv"
+        out_file = self.base_path / "dups_clean.tsv"
+        rows = [
+            INPUT_COLUMNS,
+            ["S1-001", "Acme Corp", "123 Main St", "US"],
+            ["S1-002", "Acme Corp", "123 Main St", "US"],  # Identical content, different ID
+        ]
+        self._create_tsv(in_file, rows)
+
+        profile = clean_and_profile_file(in_file, out_file, expected_prefix="S1-")
+        self.assertEqual(profile["row_count"], 2)
+
+        # Verify output file has both rows
+        with open(out_file, "r", encoding="utf-8") as f:
+            lines = [line.rstrip("\r\n").split("\t") for line in f]
+        self.assertEqual(len(lines), 3)  # header + 2 rows
+        self.assertEqual(lines[1][0], "S1-001")
+        self.assertEqual(lines[2][0], "S1-002")
+
+    def test_row_and_id_preservation(self):
+        """Output rows and entity IDs must be in exact same order with exact raw values."""
+        in_file = self.base_path / "preserve.tsv"
+        out_file = self.base_path / "preserve_clean.tsv"
+        rows = [
+            INPUT_COLUMNS,
+            ["S1-001", "First Business", "100 Ave A", "US"],
+            ["S1-002", "Second Business", "200 Ave B", "India"],
+            ["S1-003", "Third Business", "", "US"],  # Missing address
+        ]
+        self._create_tsv(in_file, rows)
+
+        clean_and_profile_file(in_file, out_file, expected_prefix="S1-")
+        quality = verify_file_quality(in_file, out_file, expected_prefix="S1-")
+        self.assertEqual(quality["status"], "PASSED")
+        for inv, val in quality["invariants"].items():
+            self.assertTrue(val, f"Invariant {inv} failed")
+
+        with open(out_file, "r", encoding="utf-8") as f:
+            lines = [line.rstrip("\r\n").split("\t") for line in f]
+
+        # Verify columns
+        self.assertEqual(lines[0], OUTPUT_COLUMNS)
+        self.assertEqual(lines[1][0:4], ["S1-001", "First Business", "100 Ave A", "US"])
+        self.assertEqual(lines[2][0:4], ["S1-002", "Second Business", "200 Ave B", "India"])
+        self.assertEqual(lines[3][0:4], ["S1-003", "Third Business", "", "US"])
+
+        # Verify missing flags and normalized values for row 3
+        self.assertEqual(lines[3][5], "")  # normalized address is empty
+        self.assertEqual(lines[3][8], "True")  # address is missing flag
+
+    def test_deterministic_output(self):
+        """Cleaning the same input multiple times must yield byte-for-byte identical output."""
+        in_file = self.base_path / "det.tsv"
+        out1 = self.base_path / "out1.tsv"
+        out2 = self.base_path / "out2.tsv"
+        rows = [
+            INPUT_COLUMNS,
+            ["S1-100", "Alpha Inc.", "10 Alpha Way", "US"],
+            ["S1-200", "Beta & Co.", "20 Beta Rd", "India"],
+        ]
+        self._create_tsv(in_file, rows)
+
+        p1 = clean_and_profile_file(in_file, out1, expected_prefix="S1-")
+        p2 = clean_and_profile_file(in_file, out2, expected_prefix="S1-")
+
+        with open(out1, "rb") as f1, open(out2, "rb") as f2:
+            self.assertEqual(f1.read(), f2.read())
+
+        self.assertEqual(p1["row_count"], p2["row_count"])
+        self.assertEqual(p1["duplicate_looking_normalized_value_counts"], p2["duplicate_looking_normalized_value_counts"])
+
+    def test_full_pipeline_success(self):
+        """End-to-end run of run_cleaning_pipeline produces expected folder structure and reports."""
+        dataset_dir = self.base_path / "dataset"
+        train_dir = dataset_dir / "train"
+        test_dir = dataset_dir / "test"
+
+        for split, s_dir in [("train", train_dir), ("test", test_dir)]:
+            for src_idx in (1, 2, 3):
+                pfx = f"S{src_idx}-"
+                file_path = s_dir / f"{split}_source{src_idx}.tsv"
+                self._create_tsv(file_path, [
+                    INPUT_COLUMNS,
+                    [f"{pfx}101", f"Biz {src_idx}", f"{src_idx}00 Main St", "US"],
+                    [f"{pfx}102", f"Biz {src_idx} Branch", "", "India"],
+                ])
+
+        output_dir = self.base_path / "cleaned_out"
+        profile_rep, quality_rep = run_cleaning_pipeline(
+            input_dir=dataset_dir,
+            output_dir=output_dir,
+            splits=["train", "test"],
+            quiet=True,
+        )
+
+        self.assertEqual(quality_rep["status"], "PASSED")
+        self.assertTrue((output_dir / "reports" / "profile.json").is_file())
+        self.assertTrue((output_dir / "reports" / "quality_checks.json").is_file())
+        self.assertTrue((output_dir / "train" / "train_source1.tsv").is_file())
+        self.assertTrue((output_dir / "test" / "test_source3.tsv").is_file())
+
+    def test_quality_check_fabricated_missing_failure(self):
+        """Quality check must fail if a missing field is replaced with a placeholder like 'Unknown'."""
+        in_file = self.base_path / "raw.tsv"
+        cleaned_bad = self.base_path / "cleaned_bad.tsv"
+        self._create_tsv(in_file, [
+            INPUT_COLUMNS,
+            ["S1-001", "Acme", "", "US"],  # missing address
+        ])
+        # Manually create bad output where missing address is fabricated as "Unknown"
+        self._create_tsv(cleaned_bad, [
+            OUTPUT_COLUMNS,
+            ["S1-001", "Acme", "", "US", "acme", "Unknown", "us", "False", "False", "False"],
+        ])
+        quality = verify_file_quality(in_file, cleaned_bad, expected_prefix="S1-")
+        self.assertEqual(quality["status"], "FAILED")
+        self.assertFalse(quality["invariants"]["normalized_missing_not_fabricated"])
+
+    def test_quality_check_altered_original_values_failure(self):
+        """Quality check must fail if original column values were altered in the cleaned output."""
+        in_file = self.base_path / "raw2.tsv"
+        cleaned_bad = self.base_path / "cleaned_bad2.tsv"
+        self._create_tsv(in_file, [
+            INPUT_COLUMNS,
+            ["S1-001", "Original Name", "123 Main St", "US"],
+        ])
+        self._create_tsv(cleaned_bad, [
+            OUTPUT_COLUMNS,
+            ["S1-001", "Altered Name", "123 Main St", "US", "altered name", "123 main st", "us", "False", "False", "False"],
+        ])
+        quality = verify_file_quality(in_file, cleaned_bad, expected_prefix="S1-")
+        self.assertEqual(quality["status"], "FAILED")
+        self.assertFalse(quality["invariants"]["original_values_unaltered"])
+
+    def test_quality_check_row_count_mismatch_failure(self):
+        """Quality check must fail if input and output row counts differ."""
+        in_file = self.base_path / "raw3.tsv"
+        cleaned_bad = self.base_path / "cleaned_bad3.tsv"
+        self._create_tsv(in_file, [
+            INPUT_COLUMNS,
+            ["S1-001", "Name 1", "123 Main St", "US"],
+            ["S1-002", "Name 2", "456 Main St", "US"],
+        ])
+        self._create_tsv(cleaned_bad, [
+            OUTPUT_COLUMNS,
+            ["S1-001", "Name 1", "123 Main St", "US", "name 1", "123 main st", "us", "False", "False", "False"],
+        ])
+        quality = verify_file_quality(in_file, cleaned_bad, expected_prefix="S1-")
+        self.assertEqual(quality["status"], "FAILED")
+        self.assertFalse(quality["invariants"]["row_count_match"])
+
+
+if __name__ == "__main__":
+    unittest.main()
+

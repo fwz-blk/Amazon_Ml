@@ -1,0 +1,11 @@
+# ML Challenge 2026 - Business Entity Resolution Pipeline
+# Data Cleaning & Profiling Stage Dependencies
+#
+# The data-cleaning and profiling stage uses 100% Python Standard Library
+# (Python >= 3.8). No external packages are required for this stage.
+#
+# Rationale:
+# 1. Zero external dependency overhead and maximum portability across execution environments.
+# 2. Complete determinism and strict bounded-memory streaming without hidden allocations.
+# 3. Native C-accelerated Unicode handling (unicodedata, str.casefold, str.translate, re).
+# 4. Built-in test runner support via unittest.

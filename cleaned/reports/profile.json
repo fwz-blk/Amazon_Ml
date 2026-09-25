@@ -1,0 +1,3137 @@
+{
+  "title": "Amazon ML Challenge 2026 - Dataset Profiling Report",
+  "timestamp": "2026-09-25T15:53:55.447594+00:00",
+  "summary": {
+    "total_files": 6,
+    "total_rows": 24229173,
+    "splits": [
+      "train",
+      "test"
+    ],
+    "elapsed_seconds": 570.08
+  },
+  "files": {
+    "train/train_source1.tsv": {
+      "file_name": "train_source1.tsv",
+      "input_path": "student_resource/dataset/train/train_source1.tsv",
+      "row_count": 2206821,
+      "column_count": 10,
+      "headers": [
+        "entity_id",
+        "business_name",
+        "business_address",
+        "country",
+        "business_name_normalized",
+        "business_address_normalized",
+        "country_normalized",
+        "business_name_is_missing",
+        "business_address_is_missing",
+        "country_is_missing"
+      ],
+      "data_types_observed": {
+        "entity_id": "string",
+        "business_name": "string",
+        "business_address": "string",
+        "country": "string",
+        "business_name_normalized": "string",
+        "business_address_normalized": "string",
+        "country_normalized": "string",
+        "business_name_is_missing": "boolean",
+        "business_address_is_missing": "boolean",
+        "country_is_missing": "boolean"
+      },
+      "missing_counts": {
+        "business_name": 0,
+        "business_address": 0,
+        "country": 0
+      },
+      "empty_string_counts": {
+        "business_name": 0,
+        "business_address": 0,
+        "country": 0
+      },
+      "unicode_non_ascii_counts": {
+        "business_name": 0,
+        "business_address": 554,
+        "country": 0
+      },
+      "multilingual_script_indicators": {
+        "business_name": {},
+        "business_address": {
+          "Latin-Extended": 2036
+        },
+        "country": {}
+      },
+      "suspicious_symbol_counts": {
+        "business_name": {
+          "ascii_control_character": 1
+        },
+        "business_address": {
+          "unicode_control_char": 1316,
+          "ascii_control_character": 83
+        },
+        "country": {}
+      },
+      "text_length_summaries": {
+        "business_name": {
+          "min": 3,
+          "max": 105,
+          "mean": 24.03,
+          "quantiles": {
+            "p25": 18,
+            "p50": 24,
+            "p75": 30,
+            "p90": 34,
+            "p95": 37,
+            "p99": 42
+          }
+        },
+        "business_address": {
+          "min": 11,
+          "max": 256,
+          "mean": 52.07,
+          "quantiles": {
+            "p25": 33,
+            "p50": 41,
+            "p75": 70,
+            "p90": 90,
+            "p95": 103,
+            "p99": 124
+          }
+        },
+        "country": {
+          "min": 2,
+          "max": 5,
+          "mean": 3.2,
+          "quantiles": {
+            "p25": 2,
+            "p50": 2,
+            "p75": 5,
+            "p90": 5,
+            "p95": 5,
+            "p99": 5
+          }
+        },
+        "business_name_normalized": {
+          "min": 3,
+          "max": 105,
+          "mean": 24.03,
+          "quantiles": {
+            "p25": 18,
+            "p50": 24,
+            "p75": 30,
+            "p90": 34,
+            "p95": 37,
+            "p99": 42
+          }
+        },
+        "business_address_normalized": {
+          "min": 11,
+          "max": 256,
+          "mean": 52.07,
+          "quantiles": {
+            "p25": 33,
+            "p50": 41,
+            "p75": 70,
+            "p90": 90,
+            "p95": 103,
+            "p99": 124
+          }
+        },
+        "country_normalized": {
+          "min": 2,
+          "max": 5,
+          "mean": 3.2,
+          "quantiles": {
+            "p25": 2,
+            "p50": 2,
+            "p75": 5,
+            "p90": 5,
+            "p95": 5,
+            "p99": 5
+          }
+        }
+      },
+      "text_length_examples": {
+        "business_name": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S1-385513693",
+              "length": 3,
+              "value": "Ave"
+            },
+            {
+              "entity_id": "S1-549506551",
+              "length": 3,
+              "value": "Ave"
+            },
+            {
+              "entity_id": "S1-646555090",
+              "length": 3,
+              "value": "Ave"
+            },
+            {
+              "entity_id": "S1-166079345",
+              "length": 3,
+              "value": "Baa"
+            },
+            {
+              "entity_id": "S1-328769083",
+              "length": 3,
+              "value": "Baa"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S1-590655896",
+              "length": 105,
+              "value": "164/B-43 Vinayaka.Plaza 2Nd Floor 24Th Cross Ro Ad 6Th Block Jayanagar Bangalore 560082 Breweries Pvt Ltd"
+            },
+            {
+              "entity_id": "S1-821281223",
+              "length": 101,
+              "value": "First Floor Survey No. 134/2/2/1B Bld/B Mp/1 Patil Heritage Shivajinagar Technologies Private Limited"
+            },
+            {
+              "entity_id": "S1-64575188",
+              "length": 94,
+              "value": "Murlidhar Apartmentajit Park Society Opp Krushi Farm Ghod-Dod Road Calibration Private Limited"
+            },
+            {
+              "entity_id": "S1-643919451",
+              "length": 93,
+              "value": "303&304 Dabour Building C-I Local Shopping Centre Iind Floor Janak Puri Electronics Pvt. Ltd."
+            },
+            {
+              "entity_id": "S1-872576541",
+              "length": 87,
+              "value": "Door No 8-3-680Prabhava Mansion Navodaya Colony Yekkareddy Uda Creative Private Limited"
+            }
+          ]
+        },
+        "business_address": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S1-395116318",
+              "length": 11,
+              "value": "Gosnold, MA"
+            },
+            {
+              "entity_id": "S1-348750394",
+              "length": 13,
+              "value": "0, Colora, MD"
+            },
+            {
+              "entity_id": "S1-381467582",
+              "length": 13,
+              "value": "0, Elkton, MD"
+            },
+            {
+              "entity_id": "S1-532852992",
+              "length": 13,
+              "value": "0, Elkton, MD"
+            },
+            {
+              "entity_id": "S1-743473366",
+              "length": 13,
+              "value": "0, Elkton, MD"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S1-286073597",
+              "length": 256,
+              "value": "C/O Medicine Godown, Canal Road, Opposite 3Rd No Bridge, Towards Sharda Sishu Tirtha School, P.O- Fulbari, P.S- Bhaktinagar, Jalpaiguri, West Bengal, Opposite 3Rd No Bridge, Towards Sharda Sishu Tirtha School, P.O- Fulbari, Rajganj, Jalpaiguri, West Bengal"
+            },
+            {
+              "entity_id": "S1-509980564",
+              "length": 245,
+              "value": "3Rd Floor, Plot No. 1050/1, Sree Sai Enclave, Survey No. 163/Part, Durgamatha House Building Co-Operative Housing Society Limited, Hydernagar, Balanagar Mandal, Kukatpally Municipal Circle, Ranga Reddy Medchal, Tirumalagiri, Hyderabad, Telangana"
+            },
+            {
+              "entity_id": "S1-694035766",
+              "length": 244,
+              "value": "Flat No301 Wing C, Vrindavan C. H. S.Ltd., Skybuild Village, New Sai Babanagar, Behind Bhatia High School, Kandivali (W), Mumbai, Skybuild Village, New Sai Babanagar, Behind Bhatia High School, Kandivali (W), Kandivlai West, Mumbai, Maharashtra"
+            },
+            {
+              "entity_id": "S1-75411527",
+              "length": 241,
+              "value": "1St-2Nd Floors, Unit No. 02 And 10Th - 16Th Floors, Unit No. 01 And 02 (Argus Block), Knowledge City, Survey No. 83/1, Inorbit Mall Road, Raidurg Panmaktha Village, Serilingampally Mandal, Ranga Reddy District, Shaikpet, Hyderabad, Telangana"
+            },
+            {
+              "entity_id": "S1-166684687",
+              "length": 241,
+              "value": "Hyderabad, Second Floor, Vaishnaoi Imperial, Bearing Municipal No. 509 (Old), Corresponding To New Municipal, Nos. 6-3-907 To 912, 6-3-907/912, 6-3-907/912/C, And 6-3-907/912/C1, Somajiguda, Raj Bhavan Road, Flat No. 204, Telangana, Nampally"
+            }
+          ]
+        },
+        "country": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S1-100000221",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S1-100003333",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S1-100003832",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S1-100004153",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S1-100005592",
+              "length": 2,
+              "value": "US"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S1-100001512",
+              "length": 5,
+              "value": "India"
+            },
+            {
+              "entity_id": "S1-100001535",
+              "length": 5,
+              "value": "India"
+            },
+            {
+              "entity_id": "S1-100001665",
+              "length": 5,
+              "value": "India"
+            },
+            {
+              "entity_id": "S1-100002411",
+              "length": 5,
+              "value": "India"
+            },
+            {
+              "entity_id": "S1-100002771",
+              "length": 5,
+              "value": "India"
+            }
+          ]
+        },
+        "business_name_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S1-385513693",
+              "length": 3,
+              "value": "ave"
+            },
+            {
+              "entity_id": "S1-549506551",
+              "length": 3,
+              "value": "ave"
+            },
+            {
+              "entity_id": "S1-646555090",
+              "length": 3,
+              "value": "ave"
+            },
+            {
+              "entity_id": "S1-166079345",
+              "length": 3,
+              "value": "baa"
+            },
+            {
+              "entity_id": "S1-328769083",
+              "length": 3,
+              "value": "baa"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S1-590655896",
+              "length": 105,
+              "value": "164/b-43 vinayaka.plaza 2nd floor 24th cross ro ad 6th block jayanagar bangalore 560082 breweries pvt ltd"
+            },
+            {
+              "entity_id": "S1-821281223",
+              "length": 101,
+              "value": "first floor survey no. 134/2/2/1b bld/b mp/1 patil heritage shivajinagar technologies private limited"
+            },
+            {
+              "entity_id": "S1-64575188",
+              "length": 94,
+              "value": "murlidhar apartmentajit park society opp krushi farm ghod-dod road calibration private limited"
+            },
+            {
+              "entity_id": "S1-643919451",
+              "length": 93,
+              "value": "303&304 dabour building c-i local shopping centre iind floor janak puri electronics pvt. ltd."
+            },
+            {
+              "entity_id": "S1-872576541",
+              "length": 87,
+              "value": "door no 8-3-680prabhava mansion navodaya colony yekkareddy uda creative private limited"
+            }
+          ]
+        },
+        "business_address_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S1-395116318",
+              "length": 11,
+              "value": "gosnold, ma"
+            },
+            {
+              "entity_id": "S1-348750394",
+              "length": 13,
+              "value": "0, colora, md"
+            },
+            {
+              "entity_id": "S1-381467582",
+              "length": 13,
+              "value": "0, elkton, md"
+            },
+            {
+              "entity_id": "S1-532852992",
+              "length": 13,
+              "value": "0, elkton, md"
+            },
+            {
+              "entity_id": "S1-743473366",
+              "length": 13,
+              "value": "0, elkton, md"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S1-286073597",
+              "length": 256,
+              "value": "c/o medicine godown, canal road, opposite 3rd no bridge, towards sharda sishu tirtha school, p.o- fulbari, p.s- bhaktinagar, jalpaiguri, west bengal, opposite 3rd no bridge, towards sharda sishu tirtha school, p.o- fulbari, rajganj, jalpaiguri, west bengal"
+            },
+            {
+              "entity_id": "S1-509980564",
+              "length": 245,
+              "value": "3rd floor, plot no. 1050/1, sree sai enclave, survey no. 163/part, durgamatha house building co-operative housing society limited, hydernagar, balanagar mandal, kukatpally municipal circle, ranga reddy medchal, tirumalagiri, hyderabad, telangana"
+            },
+            {
+              "entity_id": "S1-694035766",
+              "length": 244,
+              "value": "flat no301 wing c, vrindavan c. h. s.ltd., skybuild village, new sai babanagar, behind bhatia high school, kandivali (w), mumbai, skybuild village, new sai babanagar, behind bhatia high school, kandivali (w), kandivlai west, mumbai, maharashtra"
+            },
+            {
+              "entity_id": "S1-75411527",
+              "length": 241,
+              "value": "1st-2nd floors, unit no. 02 and 10th - 16th floors, unit no. 01 and 02 (argus block), knowledge city, survey no. 83/1, inorbit mall road, raidurg panmaktha village, serilingampally mandal, ranga reddy district, shaikpet, hyderabad, telangana"
+            },
+            {
+              "entity_id": "S1-166684687",
+              "length": 241,
+              "value": "hyderabad, second floor, vaishnaoi imperial, bearing municipal no. 509 (old), corresponding to new municipal, nos. 6-3-907 to 912, 6-3-907/912, 6-3-907/912/c, and 6-3-907/912/c1, somajiguda, raj bhavan road, flat no. 204, telangana, nampally"
+            }
+          ]
+        },
+        "country_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S1-100000221",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S1-100003333",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S1-100003832",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S1-100004153",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S1-100005592",
+              "length": 2,
+              "value": "us"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S1-100001512",
+              "length": 5,
+              "value": "india"
+            },
+            {
+              "entity_id": "S1-100001535",
+              "length": 5,
+              "value": "india"
+            },
+            {
+              "entity_id": "S1-100001665",
+              "length": 5,
+              "value": "india"
+            },
+            {
+              "entity_id": "S1-100002411",
+              "length": 5,
+              "value": "india"
+            },
+            {
+              "entity_id": "S1-100002771",
+              "length": 5,
+              "value": "india"
+            }
+          ]
+        }
+      },
+      "duplicate_looking_normalized_value_counts": {
+        "normalized_name": {
+          "unique_values_with_duplicates": 178080,
+          "total_duplicate_rows": 846097
+        },
+        "normalized_address": {
+          "unique_values_with_duplicates": 40089,
+          "total_duplicate_rows": 116304
+        },
+        "full_normalized_record": {
+          "unique_tuples_with_duplicates": 0,
+          "total_duplicate_rows": 0
+        }
+      },
+      "duplicate_entity_id_findings": [],
+      "malformed_row_findings": [],
+      "country_frequency_counts": {
+        "US": 1323633,
+        "India": 883188
+      },
+      "preservation_checks": {
+        "row_order_and_ids_preserved": true,
+        "original_fields_unaltered": true,
+        "entity_ids_preserved": true,
+        "row_count_preserved": true
+      }
+    },
+    "train/train_source2.tsv": {
+      "file_name": "train_source2.tsv",
+      "input_path": "student_resource/dataset/train/train_source2.tsv",
+      "row_count": 5034616,
+      "column_count": 10,
+      "headers": [
+        "entity_id",
+        "business_name",
+        "business_address",
+        "country",
+        "business_name_normalized",
+        "business_address_normalized",
+        "country_normalized",
+        "business_name_is_missing",
+        "business_address_is_missing",
+        "country_is_missing"
+      ],
+      "data_types_observed": {
+        "entity_id": "string",
+        "business_name": "string",
+        "business_address": "string",
+        "country": "string",
+        "business_name_normalized": "string",
+        "business_address_normalized": "string",
+        "country_normalized": "string",
+        "business_name_is_missing": "boolean",
+        "business_address_is_missing": "boolean",
+        "country_is_missing": "boolean"
+      },
+      "missing_counts": {
+        "business_name": 0,
+        "business_address": 168967,
+        "country": 0
+      },
+      "empty_string_counts": {
+        "business_name": 0,
+        "business_address": 168967,
+        "country": 0
+      },
+      "unicode_non_ascii_counts": {
+        "business_name": 764608,
+        "business_address": 478453,
+        "country": 0
+      },
+      "multilingual_script_indicators": {
+        "business_name": {
+          "Devanagari": 6960588,
+          "Tamil": 1040786,
+          "Latin-Extended": 297885,
+          "Gujarati": 811097,
+          "Kannada": 1110582,
+          "Bengali": 859428,
+          "Telugu": 1170741,
+          "Other-Unicode": 258183,
+          "Malayalam": 592033,
+          "Gurmukhi": 160388
+        },
+        "business_address": {
+          "Devanagari": 2390471,
+          "Bengali": 317700,
+          "Gujarati": 189258,
+          "Tamil": 312993,
+          "Kannada": 269920,
+          "Telugu": 287894,
+          "Malayalam": 78400,
+          "Other-Unicode": 36942,
+          "Latin-Extended": 4263,
+          "Gurmukhi": 35645
+        },
+        "country": {}
+      },
+      "suspicious_symbol_counts": {
+        "business_name": {
+          "ascii_control_character": 3
+        },
+        "business_address": {
+          "unicode_control_char": 2724,
+          "ascii_control_character": 147
+        },
+        "country": {}
+      },
+      "text_length_summaries": {
+        "business_name": {
+          "min": 2,
+          "max": 104,
+          "mean": 25.1,
+          "quantiles": {
+            "p25": 19,
+            "p50": 25,
+            "p75": 31,
+            "p90": 37,
+            "p95": 40,
+            "p99": 48
+          }
+        },
+        "business_address": {
+          "min": 0,
+          "max": 249,
+          "mean": 46.23,
+          "quantiles": {
+            "p25": 30,
+            "p50": 37,
+            "p75": 61,
+            "p90": 83,
+            "p95": 96,
+            "p99": 118
+          }
+        },
+        "country": {
+          "min": 2,
+          "max": 5,
+          "mean": 3.2,
+          "quantiles": {
+            "p25": 2,
+            "p50": 2,
+            "p75": 5,
+            "p90": 5,
+            "p95": 5,
+            "p99": 5
+          }
+        },
+        "business_name_normalized": {
+          "min": 2,
+          "max": 104,
+          "mean": 24.99,
+          "quantiles": {
+            "p25": 18,
+            "p50": 25,
+            "p75": 31,
+            "p90": 37,
+            "p95": 40,
+            "p99": 48
+          }
+        },
+        "business_address_normalized": {
+          "min": 0,
+          "max": 249,
+          "mean": 46.2,
+          "quantiles": {
+            "p25": 30,
+            "p50": 37,
+            "p75": 61,
+            "p90": 83,
+            "p95": 96,
+            "p99": 118
+          }
+        },
+        "country_normalized": {
+          "min": 2,
+          "max": 5,
+          "mean": 3.2,
+          "quantiles": {
+            "p25": 2,
+            "p50": 2,
+            "p75": 5,
+            "p90": 5,
+            "p95": 5,
+            "p99": 5
+          }
+        }
+      },
+      "text_length_examples": {
+        "business_name": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S2-485897754",
+              "length": 2,
+              "value": "#1"
+            },
+            {
+              "entity_id": "S2-380942678",
+              "length": 2,
+              "value": "#2"
+            },
+            {
+              "entity_id": "S2-388275973",
+              "length": 2,
+              "value": "#7"
+            },
+            {
+              "entity_id": "S2-423282359",
+              "length": 2,
+              "value": "#E"
+            },
+            {
+              "entity_id": "S2-640545972",
+              "length": 2,
+              "value": "#J"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S2-603021191",
+              "length": 104,
+              "value": "LTD. 303&304 DABOUR BUILDING C-I LOCAL SHOPPING CENTRE IIND FLOOR JANAK ELECTRONICS OVERSEAS PVT. CENTER"
+            },
+            {
+              "entity_id": "S2-556494127",
+              "length": 103,
+              "value": "164/B-43 VINAYAKA.PLAZA 2ND FLOOR 24TH CROSS RO AD 6TH BLOCK JAYANAGAR BANGALORE 560082 BREWERIES (PVT)"
+            },
+            {
+              "entity_id": "S2-292883139",
+              "length": 101,
+              "value": "First Floor Survey No. 134/2/2/1b Bld/B Mp/1 Patil Heritage Shivajinagar Technologies Private Limited"
+            },
+            {
+              "entity_id": "S2-281035673",
+              "length": 95,
+              "value": "Murlidhar Apartmentajit Park Society Opp Krushi Farm Ghod-Dod Rsscad Technology Private Limited"
+            },
+            {
+              "entity_id": "S2-72712788",
+              "length": 95,
+              "value": "Murlidhar Apartmentajit Park Society Opp Krushi Frm Ghod-Dod Road Calibration Private (Limited)"
+            }
+          ]
+        },
+        "business_address": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S2-109776350",
+              "length": 8,
+              "value": "1, DELHI"
+            },
+            {
+              "entity_id": "S2-865652678",
+              "length": 8,
+              "value": "1, DELHI"
+            },
+            {
+              "entity_id": "S2-380465473",
+              "length": 8,
+              "value": "B, DELHI"
+            },
+            {
+              "entity_id": "S2-451838439",
+              "length": 9,
+              "value": "#4, DELHI"
+            },
+            {
+              "entity_id": "S2-748840241",
+              "length": 9,
+              "value": "#9, DELHI"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S2-709031902",
+              "length": 249,
+              "value": "DOOR NO 1ST-6ND FLOORS, UNIT NO. 02 AND 10TH - 16TH FLOORS, UNIT NO. 01 AND 02 (ARGUS BLOCK), KNOWLEDGE CITY, SURVEY NO. 83/1, INORBIT MALL ROAD, RAIDURG PANMAKTHA VILLAGE, SERILINGAMPALLY MANDAL, RANGA REDDY DISTRICT, SHAIKPET, HYDERABAD, Telangana"
+            },
+            {
+              "entity_id": "S2-663593086",
+              "length": 244,
+              "value": "C/O MEDICINE GODOWN, CANAL ROAD, OPPOSITE 3RD NO BRIDGE, TOWARDS SHARDA SISHU TIRTHA SCHOOL, P.O- FULBARI, P.S- BHAKTINAGAR, JALPAIGURI, WEST BENGAL, OPPOSITE 3RD NO BRIDGE, TOWARDS SHARDA SISHU TIRTHA SCHOOL, P.O- FULBARI, RAJGANJ, West Bengal"
+            },
+            {
+              "entity_id": "S2-946065820",
+              "length": 244,
+              "value": "NO 1ST-2ND FLOORS, UNIT NO. 02 AND 10TH - 16TH FLOORS, UNIT NO. 01 AND 02 (ARGUS BLOCK), KNOWLEDGE CITY, SURVEY NO. 83/1, INORBIT MALL ROAD, RAIDURG PANMAKTHA VILLAGE, SERILINGAMPALLY MANDAL, RANGA REDDY DISTRICT, HYDERABAD, SHAIKPET, Telangana"
+            },
+            {
+              "entity_id": "S2-313659074",
+              "length": 243,
+              "value": "West Bengal, C/O MEDICINE GODOWN, CANAL ROAD, OPPOSITE 3RD NO BRIDGE, TOWARDS SHARDA SISHU TIRTHA SCHOOL, P.O- FULBARI, P.S- BHAKTINAGAR, JALPAGURI, WEST BENGAL, OPPOSITE 3RD NO BRIDGE, TOWARDS SHARDA SISHU TIRTHA SCHOOL, P.O- FULBARI, RAJGANJ"
+            },
+            {
+              "entity_id": "S2-560062186",
+              "length": 236,
+              "value": "Maharashtra, FLAT NO301 WING C, VRINDAVAN C. H. S.LTD., SKYBUILD VILLAGE, NEW SAI BABANAGAR, BEHIND BHATIA HIGH SCHOOL, KANDIVALI (W), MUMBAI, SKYBUILD VILLAGE, NEW SAI BABANAGAR, BEHIND BHATIA HIGH SCHOOL, KANDIVALI (W), KANDIVLAI WEST"
+            }
+          ]
+        },
+        "country": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S2-100000037",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S2-100000087",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S2-100000211",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S2-100000220",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S2-10000084",
+              "length": 2,
+              "value": "US"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S2-100000115",
+              "length": 5,
+              "value": "India"
+            },
+            {
+              "entity_id": "S2-100000189",
+              "length": 5,
+              "value": "India"
+            },
+            {
+              "entity_id": "S2-10000043",
+              "length": 5,
+              "value": "India"
+            },
+            {
+              "entity_id": "S2-100000662",
+              "length": 5,
+              "value": "India"
+            },
+            {
+              "entity_id": "S2-100001044",
+              "length": 5,
+              "value": "India"
+            }
+          ]
+        },
+        "business_name_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S2-485897754",
+              "length": 2,
+              "value": "#1"
+            },
+            {
+              "entity_id": "S2-380942678",
+              "length": 2,
+              "value": "#2"
+            },
+            {
+              "entity_id": "S2-388275973",
+              "length": 2,
+              "value": "#7"
+            },
+            {
+              "entity_id": "S2-679583006",
+              "length": 2,
+              "value": "#c"
+            },
+            {
+              "entity_id": "S2-851337751",
+              "length": 2,
+              "value": "#c"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S2-603021191",
+              "length": 104,
+              "value": "ltd. 303&304 dabour building c-i local shopping centre iind floor janak electronics overseas pvt. center"
+            },
+            {
+              "entity_id": "S2-556494127",
+              "length": 103,
+              "value": "164/b-43 vinayaka.plaza 2nd floor 24th cross ro ad 6th block jayanagar bangalore 560082 breweries (pvt)"
+            },
+            {
+              "entity_id": "S2-292883139",
+              "length": 101,
+              "value": "first floor survey no. 134/2/2/1b bld/b mp/1 patil heritage shivajinagar technologies private limited"
+            },
+            {
+              "entity_id": "S2-281035673",
+              "length": 95,
+              "value": "murlidhar apartmentajit park society opp krushi farm ghod-dod rsscad technology private limited"
+            },
+            {
+              "entity_id": "S2-72712788",
+              "length": 95,
+              "value": "murlidhar apartmentajit park society opp krushi frm ghod-dod road calibration private (limited)"
+            }
+          ]
+        },
+        "business_address_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S2-109776350",
+              "length": 8,
+              "value": "1, delhi"
+            },
+            {
+              "entity_id": "S2-865652678",
+              "length": 8,
+              "value": "1, delhi"
+            },
+            {
+              "entity_id": "S2-380465473",
+              "length": 8,
+              "value": "b, delhi"
+            },
+            {
+              "entity_id": "S2-451838439",
+              "length": 9,
+              "value": "#4, delhi"
+            },
+            {
+              "entity_id": "S2-748840241",
+              "length": 9,
+              "value": "#9, delhi"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S2-709031902",
+              "length": 249,
+              "value": "door no 1st-6nd floors, unit no. 02 and 10th - 16th floors, unit no. 01 and 02 (argus block), knowledge city, survey no. 83/1, inorbit mall road, raidurg panmaktha village, serilingampally mandal, ranga reddy district, shaikpet, hyderabad, telangana"
+            },
+            {
+              "entity_id": "S2-663593086",
+              "length": 244,
+              "value": "c/o medicine godown, canal road, opposite 3rd no bridge, towards sharda sishu tirtha school, p.o- fulbari, p.s- bhaktinagar, jalpaiguri, west bengal, opposite 3rd no bridge, towards sharda sishu tirtha school, p.o- fulbari, rajganj, west bengal"
+            },
+            {
+              "entity_id": "S2-946065820",
+              "length": 244,
+              "value": "no 1st-2nd floors, unit no. 02 and 10th - 16th floors, unit no. 01 and 02 (argus block), knowledge city, survey no. 83/1, inorbit mall road, raidurg panmaktha village, serilingampally mandal, ranga reddy district, hyderabad, shaikpet, telangana"
+            },
+            {
+              "entity_id": "S2-313659074",
+              "length": 243,
+              "value": "west bengal, c/o medicine godown, canal road, opposite 3rd no bridge, towards sharda sishu tirtha school, p.o- fulbari, p.s- bhaktinagar, jalpaguri, west bengal, opposite 3rd no bridge, towards sharda sishu tirtha school, p.o- fulbari, rajganj"
+            },
+            {
+              "entity_id": "S2-560062186",
+              "length": 236,
+              "value": "maharashtra, flat no301 wing c, vrindavan c. h. s.ltd., skybuild village, new sai babanagar, behind bhatia high school, kandivali (w), mumbai, skybuild village, new sai babanagar, behind bhatia high school, kandivali (w), kandivlai west"
+            }
+          ]
+        },
+        "country_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S2-100000037",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S2-100000087",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S2-100000211",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S2-100000220",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S2-10000084",
+              "length": 2,
+              "value": "us"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S2-100000115",
+              "length": 5,
+              "value": "india"
+            },
+            {
+              "entity_id": "S2-100000189",
+              "length": 5,
+              "value": "india"
+            },
+            {
+              "entity_id": "S2-10000043",
+              "length": 5,
+              "value": "india"
+            },
+            {
+              "entity_id": "S2-100000662",
+              "length": 5,
+              "value": "india"
+            },
+            {
+              "entity_id": "S2-100001044",
+              "length": 5,
+              "value": "india"
+            }
+          ]
+        }
+      },
+      "duplicate_looking_normalized_value_counts": {
+        "normalized_name": {
+          "unique_values_with_duplicates": 327729,
+          "total_duplicate_rows": 1169380
+        },
+        "normalized_address": {
+          "unique_values_with_duplicates": 447793,
+          "total_duplicate_rows": 1013344
+        },
+        "full_normalized_record": {
+          "unique_tuples_with_duplicates": 45772,
+          "total_duplicate_rows": 93153
+        }
+      },
+      "duplicate_entity_id_findings": [],
+      "malformed_row_findings": [],
+      "country_frequency_counts": {
+        "India": 2017799,
+        "US": 3016817
+      },
+      "preservation_checks": {
+        "row_order_and_ids_preserved": true,
+        "original_fields_unaltered": true,
+        "entity_ids_preserved": true,
+        "row_count_preserved": true
+      }
+    },
+    "train/train_source3.tsv": {
+      "file_name": "train_source3.tsv",
+      "input_path": "student_resource/dataset/train/train_source3.tsv",
+      "row_count": 5285603,
+      "column_count": 10,
+      "headers": [
+        "entity_id",
+        "business_name",
+        "business_address",
+        "country",
+        "business_name_normalized",
+        "business_address_normalized",
+        "country_normalized",
+        "business_name_is_missing",
+        "business_address_is_missing",
+        "country_is_missing"
+      ],
+      "data_types_observed": {
+        "entity_id": "string",
+        "business_name": "string",
+        "business_address": "string",
+        "country": "string",
+        "business_name_normalized": "string",
+        "business_address_normalized": "string",
+        "country_normalized": "string",
+        "business_name_is_missing": "boolean",
+        "business_address_is_missing": "boolean",
+        "country_is_missing": "boolean"
+      },
+      "missing_counts": {
+        "business_name": 0,
+        "business_address": 175916,
+        "country": 0
+      },
+      "empty_string_counts": {
+        "business_name": 0,
+        "business_address": 175916,
+        "country": 0
+      },
+      "unicode_non_ascii_counts": {
+        "business_name": 606737,
+        "business_address": 476588,
+        "country": 0
+      },
+      "multilingual_script_indicators": {
+        "business_name": {
+          "Latin-Extended": 336698,
+          "Tamil": 583187,
+          "Malayalam": 335336,
+          "Devanagari": 3897054,
+          "Telugu": 654837,
+          "Gujarati": 451059,
+          "Kannada": 627151,
+          "Other-Unicode": 142422,
+          "Bengali": 483158,
+          "Gurmukhi": 95038
+        },
+        "business_address": {
+          "Kannada": 272818,
+          "Devanagari": 2374385,
+          "Gujarati": 189102,
+          "Telugu": 287398,
+          "Tamil": 314802,
+          "Bengali": 314480,
+          "Malayalam": 76895,
+          "Gurmukhi": 35975,
+          "Other-Unicode": 36612,
+          "Latin-Extended": 3593
+        },
+        "country": {}
+      },
+      "suspicious_symbol_counts": {
+        "business_name": {
+          "ascii_control_character": 1
+        },
+        "business_address": {
+          "unicode_control_char": 2309,
+          "ascii_control_character": 156
+        },
+        "country": {}
+      },
+      "text_length_summaries": {
+        "business_name": {
+          "min": 2,
+          "max": 123,
+          "mean": 25.2,
+          "quantiles": {
+            "p25": 18,
+            "p50": 25,
+            "p75": 31,
+            "p90": 37,
+            "p95": 42,
+            "p99": 50
+          }
+        },
+        "business_address": {
+          "min": 0,
+          "max": 240,
+          "mean": 46.71,
+          "quantiles": {
+            "p25": 35,
+            "p50": 42,
+            "p75": 54,
+            "p90": 77,
+            "p95": 91,
+            "p99": 115
+          }
+        },
+        "country": {
+          "min": 2,
+          "max": 5,
+          "mean": 3.2,
+          "quantiles": {
+            "p25": 2,
+            "p50": 2,
+            "p75": 5,
+            "p90": 5,
+            "p95": 5,
+            "p99": 5
+          }
+        },
+        "business_name_normalized": {
+          "min": 2,
+          "max": 123,
+          "mean": 25.09,
+          "quantiles": {
+            "p25": 18,
+            "p50": 25,
+            "p75": 31,
+            "p90": 37,
+            "p95": 42,
+            "p99": 50
+          }
+        },
+        "business_address_normalized": {
+          "min": 0,
+          "max": 240,
+          "mean": 46.71,
+          "quantiles": {
+            "p25": 35,
+            "p50": 42,
+            "p75": 54,
+            "p90": 77,
+            "p95": 91,
+            "p99": 115
+          }
+        },
+        "country_normalized": {
+          "min": 2,
+          "max": 5,
+          "mean": 3.2,
+          "quantiles": {
+            "p25": 2,
+            "p50": 2,
+            "p75": 5,
+            "p90": 5,
+            "p95": 5,
+            "p99": 5
+          }
+        }
+      },
+      "text_length_examples": {
+        "business_name": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S3-280211607",
+              "length": 2,
+              "value": "#8"
+            },
+            {
+              "entity_id": "S3-714731585",
+              "length": 2,
+              "value": "#8"
+            },
+            {
+              "entity_id": "S3-886045104",
+              "length": 2,
+              "value": "#C"
+            },
+            {
+              "entity_id": "S3-997312448",
+              "length": 2,
+              "value": "#C"
+            },
+            {
+              "entity_id": "S3-746012949",
+              "length": 2,
+              "value": "#G"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S3-337462666",
+              "length": 123,
+              "value": "164/B-43 Vinayaka.Plaza 2Nd Floor 24Th Cross Ad Ro 6Th Block Jayanagar Bangalore 560082 560082 Breweries Industries Pvt Ltd"
+            },
+            {
+              "entity_id": "S3-427553313",
+              "length": 108,
+              "value": "First Floor Survey No. 134/2/2/1B Bld/B Mp/1 Patil Heritage Shivajinagar Technologies Industries Private Ltd"
+            },
+            {
+              "entity_id": "S3-579326566",
+              "length": 103,
+              "value": "First Floor Survey No. 134/2/2/1b Bld/B Mp/1 Patihlt Heritage Shivajinagar-Technologies Private Limited"
+            },
+            {
+              "entity_id": "S3-883266655",
+              "length": 97,
+              "value": "164/B-43 2Nd Floor 24Th Cross Ro Ad 6Th Block Jayanagar Bangalore 560082 Breweries Pvt Ltd Center"
+            },
+            {
+              "entity_id": "S3-351337115",
+              "length": 97,
+              "value": "303&304 Dabour Building C-I Local Shopping Centre Floor Janak Puri Electronics Pvt. Ltd. Partners"
+            }
+          ]
+        },
+        "business_address": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S3-2755966",
+              "length": 2,
+              "value": "DL"
+            },
+            {
+              "entity_id": "S3-934552967",
+              "length": 5,
+              "value": "1, GJ"
+            },
+            {
+              "entity_id": "S3-134088389",
+              "length": 5,
+              "value": "1, KA"
+            },
+            {
+              "entity_id": "S3-874245145",
+              "length": 5,
+              "value": "1, UP"
+            },
+            {
+              "entity_id": "S3-535055013",
+              "length": 5,
+              "value": "1, WB"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S3-709052356",
+              "length": 240,
+              "value": "6Rd/1 Floor, Plot No. 1050/1, Sree Sai Enclave, Survey No. 163/Part, Durgamatha House Building Co-operative Housing Society Limited, Hydernagar, Balanagar Mandal, Kukatpally Municipal Circle, Ranga Reddy Medchal, Hyderabad, Tirumalagiri, TG"
+            },
+            {
+              "entity_id": "S3-909327212",
+              "length": 238,
+              "value": "Plot No. 1050/1, Sree Sai Enclave, Survey No. 163/Part, Durgamatha House Building Co-operative Housing Society Limited, Hydernagar, Balanagar Mandal, Kukatpally Municipal Circle, Ranga Reddy Medchal, Tirumalagiri, Hyderabad, 3Rd Floor, TG"
+            },
+            {
+              "entity_id": "S3-932431142",
+              "length": 236,
+              "value": "Bangalore North, Site No. 10, Bangalore, ಕರ್ನಾಟಕ, Formed On Kiadb Plot Bearing No. 35, Having Bbmp Khata No. 35, In 2Nd Phase Of Peenya Industrial Area, Comprised In Sy. No. 41 And 42 Of Nallakadaranahalli Village, Yeshwanthapura, Hobli"
+            },
+            {
+              "entity_id": "S3-777402931",
+              "length": 234,
+              "value": "1St-2Nd Floors, Unit No. 02 And 10Th - 16Th Floors, Unit No. 01 And 02 (Argus Block), Knowledge City, Survey No. 83/1, Inorbit Mall Road, Raidurg Panmaktha Village, Serilingampally Mandal, Ranga Reddy District, Shaikpet, Hyderabad, TG"
+            },
+            {
+              "entity_id": "S3-764987802",
+              "length": 234,
+              "value": "Flat No. 204, Second Floor, Vaishnaoi Imperial, Bearing Municipal No. 509 (Old), Corresponding To New Municipal, Nos. 6-3-907 To 912, 6-3-907/912, 6-3-907/912/C, And 6-3-907/912/C1, Somajiguda, Raj Bhavan Road, Hyderabad, Nampally, TG"
+            }
+          ]
+        },
+        "country": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S3-100000054",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S3-10000007",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S3-100000329",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S3-100001546",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S3-100001601",
+              "length": 2,
+              "value": "US"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S3-10",
+              "length": 5,
+              "value": "India"
+            },
+            {
+              "entity_id": "S3-100000212",
+              "length": 5,
+              "value": "India"
+            },
+            {
+              "entity_id": "S3-100000574",
+              "length": 5,
+              "value": "India"
+            },
+            {
+              "entity_id": "S3-10000074",
+              "length": 5,
+              "value": "India"
+            },
+            {
+              "entity_id": "S3-100000972",
+              "length": 5,
+              "value": "India"
+            }
+          ]
+        },
+        "business_name_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S3-280211607",
+              "length": 2,
+              "value": "#8"
+            },
+            {
+              "entity_id": "S3-714731585",
+              "length": 2,
+              "value": "#8"
+            },
+            {
+              "entity_id": "S3-150755197",
+              "length": 2,
+              "value": "#c"
+            },
+            {
+              "entity_id": "S3-246365363",
+              "length": 2,
+              "value": "#c"
+            },
+            {
+              "entity_id": "S3-886045104",
+              "length": 2,
+              "value": "#c"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S3-337462666",
+              "length": 123,
+              "value": "164/b-43 vinayaka.plaza 2nd floor 24th cross ad ro 6th block jayanagar bangalore 560082 560082 breweries industries pvt ltd"
+            },
+            {
+              "entity_id": "S3-427553313",
+              "length": 108,
+              "value": "first floor survey no. 134/2/2/1b bld/b mp/1 patil heritage shivajinagar technologies industries private ltd"
+            },
+            {
+              "entity_id": "S3-579326566",
+              "length": 103,
+              "value": "first floor survey no. 134/2/2/1b bld/b mp/1 patihlt heritage shivajinagar-technologies private limited"
+            },
+            {
+              "entity_id": "S3-883266655",
+              "length": 97,
+              "value": "164/b-43 2nd floor 24th cross ro ad 6th block jayanagar bangalore 560082 breweries pvt ltd center"
+            },
+            {
+              "entity_id": "S3-351337115",
+              "length": 97,
+              "value": "303&304 dabour building c-i local shopping centre floor janak puri electronics pvt. ltd. partners"
+            }
+          ]
+        },
+        "business_address_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S3-2755966",
+              "length": 2,
+              "value": "dl"
+            },
+            {
+              "entity_id": "S3-934552967",
+              "length": 5,
+              "value": "1, gj"
+            },
+            {
+              "entity_id": "S3-134088389",
+              "length": 5,
+              "value": "1, ka"
+            },
+            {
+              "entity_id": "S3-874245145",
+              "length": 5,
+              "value": "1, up"
+            },
+            {
+              "entity_id": "S3-535055013",
+              "length": 5,
+              "value": "1, wb"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S3-709052356",
+              "length": 240,
+              "value": "6rd/1 floor, plot no. 1050/1, sree sai enclave, survey no. 163/part, durgamatha house building co-operative housing society limited, hydernagar, balanagar mandal, kukatpally municipal circle, ranga reddy medchal, hyderabad, tirumalagiri, tg"
+            },
+            {
+              "entity_id": "S3-909327212",
+              "length": 238,
+              "value": "plot no. 1050/1, sree sai enclave, survey no. 163/part, durgamatha house building co-operative housing society limited, hydernagar, balanagar mandal, kukatpally municipal circle, ranga reddy medchal, tirumalagiri, hyderabad, 3rd floor, tg"
+            },
+            {
+              "entity_id": "S3-932431142",
+              "length": 236,
+              "value": "bangalore north, site no. 10, bangalore, ಕರ್ನಾಟಕ, formed on kiadb plot bearing no. 35, having bbmp khata no. 35, in 2nd phase of peenya industrial area, comprised in sy. no. 41 and 42 of nallakadaranahalli village, yeshwanthapura, hobli"
+            },
+            {
+              "entity_id": "S3-777402931",
+              "length": 234,
+              "value": "1st-2nd floors, unit no. 02 and 10th - 16th floors, unit no. 01 and 02 (argus block), knowledge city, survey no. 83/1, inorbit mall road, raidurg panmaktha village, serilingampally mandal, ranga reddy district, shaikpet, hyderabad, tg"
+            },
+            {
+              "entity_id": "S3-764987802",
+              "length": 234,
+              "value": "flat no. 204, second floor, vaishnaoi imperial, bearing municipal no. 509 (old), corresponding to new municipal, nos. 6-3-907 to 912, 6-3-907/912, 6-3-907/912/c, and 6-3-907/912/c1, somajiguda, raj bhavan road, hyderabad, nampally, tg"
+            }
+          ]
+        },
+        "country_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S3-100000054",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S3-10000007",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S3-100000329",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S3-100001546",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S3-100001601",
+              "length": 2,
+              "value": "us"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S3-10",
+              "length": 5,
+              "value": "india"
+            },
+            {
+              "entity_id": "S3-100000212",
+              "length": 5,
+              "value": "india"
+            },
+            {
+              "entity_id": "S3-100000574",
+              "length": 5,
+              "value": "india"
+            },
+            {
+              "entity_id": "S3-10000074",
+              "length": 5,
+              "value": "india"
+            },
+            {
+              "entity_id": "S3-100000972",
+              "length": 5,
+              "value": "india"
+            }
+          ]
+        }
+      },
+      "duplicate_looking_normalized_value_counts": {
+        "normalized_name": {
+          "unique_values_with_duplicates": 326688,
+          "total_duplicate_rows": 1138818
+        },
+        "normalized_address": {
+          "unique_values_with_duplicates": 384005,
+          "total_duplicate_rows": 862505
+        },
+        "full_normalized_record": {
+          "unique_tuples_with_duplicates": 31938,
+          "total_duplicate_rows": 64870
+        }
+      },
+      "duplicate_entity_id_findings": [],
+      "malformed_row_findings": [],
+      "country_frequency_counts": {
+        "US": 3170056,
+        "India": 2115547
+      },
+      "preservation_checks": {
+        "row_order_and_ids_preserved": true,
+        "original_fields_unaltered": true,
+        "entity_ids_preserved": true,
+        "row_count_preserved": true
+      }
+    },
+    "test/test_source1.tsv": {
+      "file_name": "test_source1.tsv",
+      "input_path": "student_resource/dataset/test/test_source1.tsv",
+      "row_count": 1732544,
+      "column_count": 10,
+      "headers": [
+        "entity_id",
+        "business_name",
+        "business_address",
+        "country",
+        "business_name_normalized",
+        "business_address_normalized",
+        "country_normalized",
+        "business_name_is_missing",
+        "business_address_is_missing",
+        "country_is_missing"
+      ],
+      "data_types_observed": {
+        "entity_id": "string",
+        "business_name": "string",
+        "business_address": "string",
+        "country": "string",
+        "business_name_normalized": "string",
+        "business_address_normalized": "string",
+        "country_normalized": "string",
+        "business_name_is_missing": "boolean",
+        "business_address_is_missing": "boolean",
+        "country_is_missing": "boolean"
+      },
+      "missing_counts": {
+        "business_name": 0,
+        "business_address": 0,
+        "country": 0
+      },
+      "empty_string_counts": {
+        "business_name": 0,
+        "business_address": 0,
+        "country": 0
+      },
+      "unicode_non_ascii_counts": {
+        "business_name": 40789,
+        "business_address": 73800,
+        "country": 0
+      },
+      "multilingual_script_indicators": {
+        "business_name": {
+          "Latin-Extended": 47280
+        },
+        "business_address": {
+          "Latin-Extended": 86322,
+          "Other-Unicode": 2091
+        },
+        "country": {}
+      },
+      "suspicious_symbol_counts": {
+        "business_name": {
+          "unicode_control_char": 2
+        },
+        "business_address": {
+          "unicode_control_char": 1107,
+          "ascii_control_character": 92
+        },
+        "country": {}
+      },
+      "text_length_summaries": {
+        "business_name": {
+          "min": 3,
+          "max": 92,
+          "mean": 23.84,
+          "quantiles": {
+            "p25": 18,
+            "p50": 24,
+            "p75": 29,
+            "p90": 34,
+            "p95": 36,
+            "p99": 42
+          }
+        },
+        "business_address": {
+          "min": 11,
+          "max": 268,
+          "mean": 57.21,
+          "quantiles": {
+            "p25": 36,
+            "p50": 50,
+            "p75": 74,
+            "p90": 93,
+            "p95": 105,
+            "p99": 126
+          }
+        },
+        "country": {
+          "min": 2,
+          "max": 6,
+          "mean": 4.0,
+          "quantiles": {
+            "p25": 2,
+            "p50": 5,
+            "p75": 5,
+            "p90": 6,
+            "p95": 6,
+            "p99": 6
+          }
+        },
+        "business_name_normalized": {
+          "min": 3,
+          "max": 92,
+          "mean": 23.84,
+          "quantiles": {
+            "p25": 18,
+            "p50": 24,
+            "p75": 29,
+            "p90": 34,
+            "p95": 36,
+            "p99": 42
+          }
+        },
+        "business_address_normalized": {
+          "min": 11,
+          "max": 268,
+          "mean": 57.21,
+          "quantiles": {
+            "p25": 36,
+            "p50": 50,
+            "p75": 74,
+            "p90": 93,
+            "p95": 105,
+            "p99": 126
+          }
+        },
+        "country_normalized": {
+          "min": 2,
+          "max": 6,
+          "mean": 4.0,
+          "quantiles": {
+            "p25": 2,
+            "p50": 5,
+            "p75": 5,
+            "p90": 6,
+            "p95": 6,
+            "p99": 6
+          }
+        }
+      },
+      "text_length_examples": {
+        "business_name": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S1-697078181",
+              "length": 3,
+              "value": "Acp"
+            },
+            {
+              "entity_id": "S1-609307440",
+              "length": 3,
+              "value": "Air"
+            },
+            {
+              "entity_id": "S1-751400584",
+              "length": 3,
+              "value": "Air"
+            },
+            {
+              "entity_id": "S1-346385133",
+              "length": 3,
+              "value": "All"
+            },
+            {
+              "entity_id": "S1-714865224",
+              "length": 3,
+              "value": "All"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S1-990896063",
+              "length": 92,
+              "value": "Evaan Group of Companies of Whitefield Roadsadaramangala Indl Area Mahadevapura Post Pvt Ltd"
+            },
+            {
+              "entity_id": "S1-670215189",
+              "length": 92,
+              "value": "Trimurti Apartment.Mgh-1 Opposite P & T Colo Malviya Nagar Developersprivate Private Limited"
+            },
+            {
+              "entity_id": "S1-48487934",
+              "length": 88,
+              "value": "Swayam Siddhi Commercialcomplex Exhibition Road Ps- Gandhi Maidan Veneer Private Limited"
+            },
+            {
+              "entity_id": "S1-60609279",
+              "length": 88,
+              "value": "Versova Layoutkaggadasapura Main Road Cv Raman Nagar Constructionprivate Private Limited"
+            },
+            {
+              "entity_id": "S1-920204787",
+              "length": 86,
+              "value": "Gyan Cars (India) of Ashiana Plaza Budh Marg Patna-800001 P.S.-Kotwali Private Limited"
+            }
+          ]
+        },
+        "business_address": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S1-811605067",
+              "length": 11,
+              "value": "Gaya, Bihar"
+            },
+            {
+              "entity_id": "S1-444377763",
+              "length": 13,
+              "value": "0, Elkton, MD"
+            },
+            {
+              "entity_id": "S1-206924861",
+              "length": 13,
+              "value": "793 11, 0, TX"
+            },
+            {
+              "entity_id": "S1-211745101",
+              "length": 13,
+              "value": "Rohtas, Bihar"
+            },
+            {
+              "entity_id": "S1-516757129",
+              "length": 14,
+              "value": "12 2, Boaz, AL"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S1-526297214",
+              "length": 268,
+              "value": "Orange Business Centre 1St Floor Greater Visakhapatnam Smart City Corporation Limited, Building Plot No 21, Behind Ambica Sea Green Hotel, Near Victory At Sea Memorial, Kirlampudi Layout, Beach Road, Visakhapatnam (Urban), Visakhapatnam, Vishakhapatnam, Andhra Pradesh"
+            },
+            {
+              "entity_id": "S1-2395005",
+              "length": 240,
+              "value": "Industrial Unit No. B 205 Second Floor Regency, Plaza 1 Co Operative Premises Society Limited Formerly Known As Regency Plaza Building No. 1, Near Valduni Bridge, Kalyan, Ambernath Road Shanti Nagar, Ulhasnagar 3, Kalyan, Thane, Maharashtra"
+            },
+            {
+              "entity_id": "S1-21758984",
+              "length": 239,
+              "value": "Kanchipuram, Tamil Nadu, B-02 B 119/3 Part, 123/5A Part, 123/58, 123/5C Part, 124/1 Part, 125/1 Part, 125/2 Part, 125/3 Part, 125/4 Part, 126 Part And 138/3 Part, Walajabad Road, Varanavasi Village, Walajabad Taluk, Oragadam, Sriperumbudur"
+            },
+            {
+              "entity_id": "S1-162193373",
+              "length": 238,
+              "value": "Pune City, Plot No. 58, Office No. A / 20, F2 Block, First Floor, Yashashree Industrial Premises, Yashashree Industrial Co-Operative Society Ltd., Above Tata Motors Showroom, Yashwant Nagar, Telco Road, Pimpri Chinchwad, Maharashtra, Pune"
+            },
+            {
+              "entity_id": "S1-518282343",
+              "length": 236,
+              "value": "O2 B04, Survey Nos. 119/1C Part, 119/2A Part, 119/2C Part, 120/1 Part, 120/2 Part, 120/3 Part And 122/1 Part, Esr Oragadam Industrial And Logistics Park, Oragadam - Walajabad Road, Walajabad Taluk, Sriperumbudur, Kanchipuram, Tamil Nadu"
+            }
+          ]
+        },
+        "country": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S1-100000556",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S1-100005491",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S1-100005589",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S1-100005898",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S1-100006761",
+              "length": 2,
+              "value": "US"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S1-100001013",
+              "length": 6,
+              "value": "France"
+            },
+            {
+              "entity_id": "S1-100001295",
+              "length": 6,
+              "value": "France"
+            },
+            {
+              "entity_id": "S1-100003550",
+              "length": 6,
+              "value": "France"
+            },
+            {
+              "entity_id": "S1-100005079",
+              "length": 6,
+              "value": "France"
+            },
+            {
+              "entity_id": "S1-100008792",
+              "length": 6,
+              "value": "France"
+            }
+          ]
+        },
+        "business_name_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S1-697078181",
+              "length": 3,
+              "value": "acp"
+            },
+            {
+              "entity_id": "S1-609307440",
+              "length": 3,
+              "value": "air"
+            },
+            {
+              "entity_id": "S1-751400584",
+              "length": 3,
+              "value": "air"
+            },
+            {
+              "entity_id": "S1-346385133",
+              "length": 3,
+              "value": "all"
+            },
+            {
+              "entity_id": "S1-714865224",
+              "length": 3,
+              "value": "all"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S1-990896063",
+              "length": 92,
+              "value": "evaan group of companies of whitefield roadsadaramangala indl area mahadevapura post pvt ltd"
+            },
+            {
+              "entity_id": "S1-670215189",
+              "length": 92,
+              "value": "trimurti apartment.mgh-1 opposite p & t colo malviya nagar developersprivate private limited"
+            },
+            {
+              "entity_id": "S1-48487934",
+              "length": 88,
+              "value": "swayam siddhi commercialcomplex exhibition road ps- gandhi maidan veneer private limited"
+            },
+            {
+              "entity_id": "S1-60609279",
+              "length": 88,
+              "value": "versova layoutkaggadasapura main road cv raman nagar constructionprivate private limited"
+            },
+            {
+              "entity_id": "S1-920204787",
+              "length": 86,
+              "value": "gyan cars (india) of ashiana plaza budh marg patna-800001 p.s.-kotwali private limited"
+            }
+          ]
+        },
+        "business_address_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S1-811605067",
+              "length": 11,
+              "value": "gaya, bihar"
+            },
+            {
+              "entity_id": "S1-444377763",
+              "length": 13,
+              "value": "0, elkton, md"
+            },
+            {
+              "entity_id": "S1-206924861",
+              "length": 13,
+              "value": "793 11, 0, tx"
+            },
+            {
+              "entity_id": "S1-211745101",
+              "length": 13,
+              "value": "rohtas, bihar"
+            },
+            {
+              "entity_id": "S1-516757129",
+              "length": 14,
+              "value": "12 2, boaz, al"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S1-526297214",
+              "length": 268,
+              "value": "orange business centre 1st floor greater visakhapatnam smart city corporation limited, building plot no 21, behind ambica sea green hotel, near victory at sea memorial, kirlampudi layout, beach road, visakhapatnam (urban), visakhapatnam, vishakhapatnam, andhra pradesh"
+            },
+            {
+              "entity_id": "S1-2395005",
+              "length": 240,
+              "value": "industrial unit no. b 205 second floor regency, plaza 1 co operative premises society limited formerly known as regency plaza building no. 1, near valduni bridge, kalyan, ambernath road shanti nagar, ulhasnagar 3, kalyan, thane, maharashtra"
+            },
+            {
+              "entity_id": "S1-21758984",
+              "length": 239,
+              "value": "kanchipuram, tamil nadu, b-02 b 119/3 part, 123/5a part, 123/58, 123/5c part, 124/1 part, 125/1 part, 125/2 part, 125/3 part, 125/4 part, 126 part and 138/3 part, walajabad road, varanavasi village, walajabad taluk, oragadam, sriperumbudur"
+            },
+            {
+              "entity_id": "S1-162193373",
+              "length": 238,
+              "value": "pune city, plot no. 58, office no. a / 20, f2 block, first floor, yashashree industrial premises, yashashree industrial co-operative society ltd., above tata motors showroom, yashwant nagar, telco road, pimpri chinchwad, maharashtra, pune"
+            },
+            {
+              "entity_id": "S1-518282343",
+              "length": 236,
+              "value": "o2 b04, survey nos. 119/1c part, 119/2a part, 119/2c part, 120/1 part, 120/2 part, 120/3 part and 122/1 part, esr oragadam industrial and logistics park, oragadam - walajabad road, walajabad taluk, sriperumbudur, kanchipuram, tamil nadu"
+            }
+          ]
+        },
+        "country_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S1-100000556",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S1-100005491",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S1-100005589",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S1-100005898",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S1-100006761",
+              "length": 2,
+              "value": "us"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S1-100001013",
+              "length": 6,
+              "value": "france"
+            },
+            {
+              "entity_id": "S1-100001295",
+              "length": 6,
+              "value": "france"
+            },
+            {
+              "entity_id": "S1-100003550",
+              "length": 6,
+              "value": "france"
+            },
+            {
+              "entity_id": "S1-100005079",
+              "length": 6,
+              "value": "france"
+            },
+            {
+              "entity_id": "S1-100008792",
+              "length": 6,
+              "value": "france"
+            }
+          ]
+        }
+      },
+      "duplicate_looking_normalized_value_counts": {
+        "normalized_name": {
+          "unique_values_with_duplicates": 130383,
+          "total_duplicate_rows": 624683
+        },
+        "normalized_address": {
+          "unique_values_with_duplicates": 33702,
+          "total_duplicate_rows": 91705
+        },
+        "full_normalized_record": {
+          "unique_tuples_with_duplicates": 0,
+          "total_duplicate_rows": 0
+        }
+      },
+      "duplicate_entity_id_findings": [],
+      "malformed_row_findings": [],
+      "country_frequency_counts": {
+        "US": 663106,
+        "France": 259452,
+        "India": 809986
+      },
+      "preservation_checks": {
+        "row_order_and_ids_preserved": true,
+        "original_fields_unaltered": true,
+        "entity_ids_preserved": true,
+        "row_count_preserved": true
+      }
+    },
+    "test/test_source2.tsv": {
+      "file_name": "test_source2.tsv",
+      "input_path": "student_resource/dataset/test/test_source2.tsv",
+      "row_count": 4887273,
+      "column_count": 10,
+      "headers": [
+        "entity_id",
+        "business_name",
+        "business_address",
+        "country",
+        "business_name_normalized",
+        "business_address_normalized",
+        "country_normalized",
+        "business_name_is_missing",
+        "business_address_is_missing",
+        "country_is_missing"
+      ],
+      "data_types_observed": {
+        "entity_id": "string",
+        "business_name": "string",
+        "business_address": "string",
+        "country": "string",
+        "business_name_normalized": "string",
+        "business_address_normalized": "string",
+        "country_normalized": "string",
+        "business_name_is_missing": "boolean",
+        "business_address_is_missing": "boolean",
+        "country_is_missing": "boolean"
+      },
+      "missing_counts": {
+        "business_name": 0,
+        "business_address": 129408,
+        "country": 0
+      },
+      "empty_string_counts": {
+        "business_name": 0,
+        "business_address": 129408,
+        "country": 0
+      },
+      "unicode_non_ascii_counts": {
+        "business_name": 928158,
+        "business_address": 720665,
+        "country": 0
+      },
+      "multilingual_script_indicators": {
+        "business_name": {
+          "Latin-Extended": 417876,
+          "Telugu": 1373896,
+          "Gujarati": 947101,
+          "Gurmukhi": 197189,
+          "Bengali": 1016676,
+          "Malayalam": 707433,
+          "Devanagari": 8185100,
+          "Kannada": 1343095,
+          "Other-Unicode": 307931,
+          "Tamil": 1228249
+        },
+        "business_address": {
+          "Latin-Extended": 198743,
+          "Gujarati": 220254,
+          "Devanagari": 2739537,
+          "Gurmukhi": 40975,
+          "Other-Unicode": 47909,
+          "Tamil": 365589,
+          "Malayalam": 90645,
+          "Bengali": 368320,
+          "Kannada": 315042,
+          "Telugu": 332238
+        },
+        "country": {}
+      },
+      "suspicious_symbol_counts": {
+        "business_name": {
+          "unicode_control_char": 2
+        },
+        "business_address": {
+          "ascii_control_character": 227,
+          "unicode_control_char": 2821
+        },
+        "country": {}
+      },
+      "text_length_summaries": {
+        "business_name": {
+          "min": 2,
+          "max": 102,
+          "mean": 25.7,
+          "quantiles": {
+            "p25": 19,
+            "p50": 25,
+            "p75": 32,
+            "p90": 38,
+            "p95": 42,
+            "p99": 49
+          }
+        },
+        "business_address": {
+          "min": 0,
+          "max": 269,
+          "mean": 50.41,
+          "quantiles": {
+            "p25": 32,
+            "p50": 43,
+            "p75": 67,
+            "p90": 87,
+            "p95": 99,
+            "p99": 120
+          }
+        },
+        "country": {
+          "min": 2,
+          "max": 6,
+          "mean": 4.0,
+          "quantiles": {
+            "p25": 2,
+            "p50": 5,
+            "p75": 5,
+            "p90": 6,
+            "p95": 6,
+            "p99": 6
+          }
+        },
+        "business_name_normalized": {
+          "min": 2,
+          "max": 102,
+          "mean": 25.6,
+          "quantiles": {
+            "p25": 19,
+            "p50": 25,
+            "p75": 32,
+            "p90": 38,
+            "p95": 41,
+            "p99": 49
+          }
+        },
+        "business_address_normalized": {
+          "min": 0,
+          "max": 269,
+          "mean": 50.4,
+          "quantiles": {
+            "p25": 32,
+            "p50": 43,
+            "p75": 67,
+            "p90": 87,
+            "p95": 99,
+            "p99": 120
+          }
+        },
+        "country_normalized": {
+          "min": 2,
+          "max": 6,
+          "mean": 4.0,
+          "quantiles": {
+            "p25": 2,
+            "p50": 5,
+            "p75": 5,
+            "p90": 6,
+            "p95": 6,
+            "p99": 6
+          }
+        }
+      },
+      "text_length_examples": {
+        "business_name": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S2-406256178",
+              "length": 2,
+              "value": "#2"
+            },
+            {
+              "entity_id": "S2-537083898",
+              "length": 2,
+              "value": "#5"
+            },
+            {
+              "entity_id": "S2-930197710",
+              "length": 2,
+              "value": "#8"
+            },
+            {
+              "entity_id": "S2-7656181",
+              "length": 2,
+              "value": "#G"
+            },
+            {
+              "entity_id": "S2-651474844",
+              "length": 2,
+              "value": "#N"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S2-466758377",
+              "length": 102,
+              "value": "evaan group of companies of whitefield roadsadaramangala indl area mahadevapura post infratech pvt ltd"
+            },
+            {
+              "entity_id": "S2-948788479",
+              "length": 95,
+              "value": "SANT 24 BUILDINGSEVOKE ROAD WEF DEEP 12 2001 PS SILIGURI FOODS INFRATECH PRIVATE LIMITED #98694"
+            },
+            {
+              "entity_id": "S2-194954698",
+              "length": 95,
+              "value": "TRIMURTI APARTMENT.MGH-1 OPPOSITE  P & T COLO MADLIVAYA NAGAR DEVELOPERSPRIVATE PRIVATE LIMITED"
+            },
+            {
+              "entity_id": "S2-615307673",
+              "length": 94,
+              "value": "Shree Global Ankit Apartments Behindkalpataru Bldg Navghar Road Bhayander East Enterprises Ltd"
+            },
+            {
+              "entity_id": "S2-939842861",
+              "length": 94,
+              "value": "Swayam Siddhi Commercialcomplex Exhibition Road Ps- Gandhi Maidan Veneer Group Private Limited"
+            }
+          ]
+        },
+        "business_address": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S2-144314641",
+              "length": 5,
+              "value": "DELHI"
+            },
+            {
+              "entity_id": "S2-668558380",
+              "length": 5,
+              "value": "DELHI"
+            },
+            {
+              "entity_id": "S2-227135709",
+              "length": 5,
+              "value": "LILLE"
+            },
+            {
+              "entity_id": "S2-980848262",
+              "length": 5,
+              "value": "LILLE"
+            },
+            {
+              "entity_id": "S2-759661067",
+              "length": 5,
+              "value": "Lille"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S2-525969980",
+              "length": 269,
+              "value": "NO 276, FIRST FLOOR, MONTERRA BUILDING SURVEY NO 24, SNEHITHA HILLS-PIHASE 1, PLOT NO 276, FIRST FLOOR, MONTERRA BUILDING SURVEY NO 24, SNEHITHA HILLS-PIHASE 1, PINEGROVE COLLEGE ROAD, NEAR APPA JUNCTION, PEERAMCHERUVU, GANDIPET MANDAL, RANGAREDDY, HYDERABAD, Telangana"
+            },
+            {
+              "entity_id": "S2-673363598",
+              "length": 268,
+              "value": "ORANGE BUSINESS CENTRE 1ST FLOOR GREATER VISAKHAPATNAM SMART CITY CORPORATION LIMITED, BUILDING PLOT NO 21, BEHIND AMBICA SEA GREEN HOTEL, NEAR VICTORY AT SEA MEMORIAL, KIRLAMPUDI LAYOUT, BEACH ROAD, VISAKHAPATNAM (URBAN), VISAKHAPATNAM, VISHAKHAPATNAM, Andhra Pradesh"
+            },
+            {
+              "entity_id": "S2-737914864",
+              "length": 268,
+              "value": "ORANGE BUSINESS CENTRE 6ST FLOOR GREATER VISAKHAPATNAM SMART CITY CORPORATION LIMITED, BUILDING PLOT NO 21, BEHIND AMBICA SEA GREEN HOTEL, NEAR VICTORY AT SEA MEMORIAL, KIRLAMPUDI LAYOUT, BEACH ROAD, VISAKHAPATNAM (URBAN), VISAKHAPATNAM, VISHAKHAPATNAM, Andhra Pradesh"
+            },
+            {
+              "entity_id": "S2-654539122",
+              "length": 266,
+              "value": "VISAKHAPATNAM, ఆంధ్రప్రదేశ్, VISHAKHAPATNAM, BUILDING PLOT NO 21, BEHIND AMBICA SEA GREEN HOTEL, NEAR VICTORY AT SEA MEMORIAL, KIRLAMPUDI LAYOUT, BEACH ROAD, VISAKHAPATNAM (URBAN), ORANGE BUSINESS CENTRE 1ST FLOOR GREATER VISAKHAPATNAM SMART CITY CORPORATION LIMITED"
+            },
+            {
+              "entity_id": "S2-32745373",
+              "length": 242,
+              "value": "BUILDING NO. 1, 3RD AND 4TH FLOOR, PLOT NO. 26-29 & 29-P HITECH DEFENCE & AEROSPACE PARK (IT SECTOR), INDUSTRIAL AREA SINGAHALLI VILLAGE AND AREBINNAMANGALA VILLAGE, JALA HOBLI, BENGALURU NORTH TALUK, BENGALURU HQ REGION, BANGALORE, Karnataka"
+            }
+          ]
+        },
+        "country": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S2-100000099",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S2-100000169",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S2-100001538",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S2-100002",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S2-100002163",
+              "length": 2,
+              "value": "US"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S2-100002129",
+              "length": 6,
+              "value": "France"
+            },
+            {
+              "entity_id": "S2-10000398",
+              "length": 6,
+              "value": "France"
+            },
+            {
+              "entity_id": "S2-100004601",
+              "length": 6,
+              "value": "France"
+            },
+            {
+              "entity_id": "S2-100006473",
+              "length": 6,
+              "value": "France"
+            },
+            {
+              "entity_id": "S2-100008213",
+              "length": 6,
+              "value": "France"
+            }
+          ]
+        },
+        "business_name_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S2-406256178",
+              "length": 2,
+              "value": "#2"
+            },
+            {
+              "entity_id": "S2-537083898",
+              "length": 2,
+              "value": "#5"
+            },
+            {
+              "entity_id": "S2-930197710",
+              "length": 2,
+              "value": "#8"
+            },
+            {
+              "entity_id": "S2-324747510",
+              "length": 2,
+              "value": "#c"
+            },
+            {
+              "entity_id": "S2-716862670",
+              "length": 2,
+              "value": "#c"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S2-466758377",
+              "length": 102,
+              "value": "evaan group of companies of whitefield roadsadaramangala indl area mahadevapura post infratech pvt ltd"
+            },
+            {
+              "entity_id": "S2-948788479",
+              "length": 95,
+              "value": "sant 24 buildingsevoke road wef deep 12 2001 ps siliguri foods infratech private limited #98694"
+            },
+            {
+              "entity_id": "S2-615307673",
+              "length": 94,
+              "value": "shree global ankit apartments behindkalpataru bldg navghar road bhayander east enterprises ltd"
+            },
+            {
+              "entity_id": "S2-939842861",
+              "length": 94,
+              "value": "swayam siddhi commercialcomplex exhibition road ps- gandhi maidan veneer group private limited"
+            },
+            {
+              "entity_id": "S2-635577199",
+              "length": 94,
+              "value": "swayam siddhi commercialcomplex exhibition road ps- gandhi maidan veneer infratech private ltd"
+            }
+          ]
+        },
+        "business_address_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S2-144314641",
+              "length": 5,
+              "value": "delhi"
+            },
+            {
+              "entity_id": "S2-668558380",
+              "length": 5,
+              "value": "delhi"
+            },
+            {
+              "entity_id": "S2-227135709",
+              "length": 5,
+              "value": "lille"
+            },
+            {
+              "entity_id": "S2-759661067",
+              "length": 5,
+              "value": "lille"
+            },
+            {
+              "entity_id": "S2-980848262",
+              "length": 5,
+              "value": "lille"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S2-525969980",
+              "length": 269,
+              "value": "no 276, first floor, monterra building survey no 24, snehitha hills-pihase 1, plot no 276, first floor, monterra building survey no 24, snehitha hills-pihase 1, pinegrove college road, near appa junction, peeramcheruvu, gandipet mandal, rangareddy, hyderabad, telangana"
+            },
+            {
+              "entity_id": "S2-673363598",
+              "length": 268,
+              "value": "orange business centre 1st floor greater visakhapatnam smart city corporation limited, building plot no 21, behind ambica sea green hotel, near victory at sea memorial, kirlampudi layout, beach road, visakhapatnam (urban), visakhapatnam, vishakhapatnam, andhra pradesh"
+            },
+            {
+              "entity_id": "S2-737914864",
+              "length": 268,
+              "value": "orange business centre 6st floor greater visakhapatnam smart city corporation limited, building plot no 21, behind ambica sea green hotel, near victory at sea memorial, kirlampudi layout, beach road, visakhapatnam (urban), visakhapatnam, vishakhapatnam, andhra pradesh"
+            },
+            {
+              "entity_id": "S2-654539122",
+              "length": 266,
+              "value": "visakhapatnam, ఆంధ్రప్రదేశ్, vishakhapatnam, building plot no 21, behind ambica sea green hotel, near victory at sea memorial, kirlampudi layout, beach road, visakhapatnam (urban), orange business centre 1st floor greater visakhapatnam smart city corporation limited"
+            },
+            {
+              "entity_id": "S2-32745373",
+              "length": 242,
+              "value": "building no. 1, 3rd and 4th floor, plot no. 26-29 & 29-p hitech defence & aerospace park (it sector), industrial area singahalli village and arebinnamangala village, jala hobli, bengaluru north taluk, bengaluru hq region, bangalore, karnataka"
+            }
+          ]
+        },
+        "country_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S2-100000099",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S2-100000169",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S2-100001538",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S2-100002",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S2-100002163",
+              "length": 2,
+              "value": "us"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S2-100002129",
+              "length": 6,
+              "value": "france"
+            },
+            {
+              "entity_id": "S2-10000398",
+              "length": 6,
+              "value": "france"
+            },
+            {
+              "entity_id": "S2-100004601",
+              "length": 6,
+              "value": "france"
+            },
+            {
+              "entity_id": "S2-100006473",
+              "length": 6,
+              "value": "france"
+            },
+            {
+              "entity_id": "S2-100008213",
+              "length": 6,
+              "value": "france"
+            }
+          ]
+        }
+      },
+      "duplicate_looking_normalized_value_counts": {
+        "normalized_name": {
+          "unique_values_with_duplicates": 303701,
+          "total_duplicate_rows": 1061622
+        },
+        "normalized_address": {
+          "unique_values_with_duplicates": 476146,
+          "total_duplicate_rows": 1051974
+        },
+        "full_normalized_record": {
+          "unique_tuples_with_duplicates": 38987,
+          "total_duplicate_rows": 79397
+        }
+      },
+      "duplicate_entity_id_findings": [],
+      "malformed_row_findings": [],
+      "country_frequency_counts": {
+        "India": 2312565,
+        "France": 703378,
+        "US": 1871330
+      },
+      "preservation_checks": {
+        "row_order_and_ids_preserved": true,
+        "original_fields_unaltered": true,
+        "entity_ids_preserved": true,
+        "row_count_preserved": true
+      }
+    },
+    "test/test_source3.tsv": {
+      "file_name": "test_source3.tsv",
+      "input_path": "student_resource/dataset/test/test_source3.tsv",
+      "row_count": 5082316,
+      "column_count": 10,
+      "headers": [
+        "entity_id",
+        "business_name",
+        "business_address",
+        "country",
+        "business_name_normalized",
+        "business_address_normalized",
+        "country_normalized",
+        "business_name_is_missing",
+        "business_address_is_missing",
+        "country_is_missing"
+      ],
+      "data_types_observed": {
+        "entity_id": "string",
+        "business_name": "string",
+        "business_address": "string",
+        "country": "string",
+        "business_name_normalized": "string",
+        "business_address_normalized": "string",
+        "country_normalized": "string",
+        "business_name_is_missing": "boolean",
+        "business_address_is_missing": "boolean",
+        "country_is_missing": "boolean"
+      },
+      "missing_counts": {
+        "business_name": 0,
+        "business_address": 136098,
+        "country": 0
+      },
+      "empty_string_counts": {
+        "business_name": 0,
+        "business_address": 136098,
+        "country": 0
+      },
+      "unicode_non_ascii_counts": {
+        "business_name": 737515,
+        "business_address": 729222,
+        "country": 0
+      },
+      "multilingual_script_indicators": {
+        "business_name": {
+          "Devanagari": 4578101,
+          "Tamil": 685541,
+          "Latin-Extended": 454638,
+          "Kannada": 755347,
+          "Gujarati": 525204,
+          "Gurmukhi": 109723,
+          "Bengali": 569052,
+          "Malayalam": 400432,
+          "Telugu": 774819,
+          "Other-Unicode": 172135
+        },
+        "business_address": {
+          "Devanagari": 2745040,
+          "Kannada": 316148,
+          "Latin-Extended": 208226,
+          "Bengali": 364270,
+          "Tamil": 364896,
+          "Gujarati": 220392,
+          "Gurmukhi": 39960,
+          "Telugu": 330145,
+          "Malayalam": 89665,
+          "Other-Unicode": 48636
+        },
+        "country": {}
+      },
+      "suspicious_symbol_counts": {
+        "business_name": {
+          "unicode_control_char": 5
+        },
+        "business_address": {
+          "unicode_control_char": 2423,
+          "ascii_control_character": 204
+        },
+        "country": {}
+      },
+      "text_length_summaries": {
+        "business_name": {
+          "min": 2,
+          "max": 103,
+          "mean": 25.66,
+          "quantiles": {
+            "p25": 19,
+            "p50": 25,
+            "p75": 32,
+            "p90": 38,
+            "p95": 42,
+            "p99": 50
+          }
+        },
+        "business_address": {
+          "min": 0,
+          "max": 267,
+          "mean": 48.74,
+          "quantiles": {
+            "p25": 35,
+            "p50": 43,
+            "p75": 59,
+            "p90": 81,
+            "p95": 94,
+            "p99": 117
+          }
+        },
+        "country": {
+          "min": 2,
+          "max": 6,
+          "mean": 4.0,
+          "quantiles": {
+            "p25": 2,
+            "p50": 5,
+            "p75": 5,
+            "p90": 6,
+            "p95": 6,
+            "p99": 6
+          }
+        },
+        "business_name_normalized": {
+          "min": 2,
+          "max": 103,
+          "mean": 25.55,
+          "quantiles": {
+            "p25": 19,
+            "p50": 25,
+            "p75": 32,
+            "p90": 38,
+            "p95": 42,
+            "p99": 50
+          }
+        },
+        "business_address_normalized": {
+          "min": 0,
+          "max": 267,
+          "mean": 48.74,
+          "quantiles": {
+            "p25": 35,
+            "p50": 43,
+            "p75": 59,
+            "p90": 81,
+            "p95": 94,
+            "p99": 117
+          }
+        },
+        "country_normalized": {
+          "min": 2,
+          "max": 6,
+          "mean": 4.0,
+          "quantiles": {
+            "p25": 2,
+            "p50": 5,
+            "p75": 5,
+            "p90": 6,
+            "p95": 6,
+            "p99": 6
+          }
+        }
+      },
+      "text_length_examples": {
+        "business_name": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S3-803139892",
+              "length": 2,
+              "value": "#1"
+            },
+            {
+              "entity_id": "S3-157239907",
+              "length": 2,
+              "value": "#3"
+            },
+            {
+              "entity_id": "S3-631447423",
+              "length": 2,
+              "value": "#7"
+            },
+            {
+              "entity_id": "S3-978810779",
+              "length": 2,
+              "value": "#9"
+            },
+            {
+              "entity_id": "S3-701504574",
+              "length": 2,
+              "value": "#G"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S3-493326166",
+              "length": 103,
+              "value": "Cirapyra F/K/A Swayam Siddhi Commercialcomplex Exhibition Road Ps- Gandhi Maidan Veneer Private Limited"
+            },
+            {
+              "entity_id": "S3-74994557",
+              "length": 102,
+              "value": "Evaan Group of Companies of Whitefield Roadsadaramangala Indl Area Mahadevapura Post Overseas Pvt Ltd."
+            },
+            {
+              "entity_id": "S3-749133717",
+              "length": 101,
+              "value": "Moon Infotech Of Saranya Nagar Layout Kundrathur Thirumudivakkam Main Road Industries Ltd (ID: 18513)"
+            },
+            {
+              "entity_id": "S3-124234492",
+              "length": 99,
+              "value": "Pmc Lights (India)-Sivakasi Co-Operativeindustrial Estate Srivilliputtur Rd Enterprises Corporation"
+            },
+            {
+              "entity_id": "S3-199593588",
+              "length": 97,
+              "value": "Calokor Labs d/b/a Sant Deep Buildingsevoke Road Wef 24 12 2001 Ps Siliguri Foods Private Limited"
+            }
+          ]
+        },
+        "business_address": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S3-85969735",
+              "length": 5,
+              "value": "1, AP"
+            },
+            {
+              "entity_id": "S3-336421409",
+              "length": 5,
+              "value": "1, WB"
+            },
+            {
+              "entity_id": "S3-141403605",
+              "length": 5,
+              "value": "2, MH"
+            },
+            {
+              "entity_id": "S3-952741851",
+              "length": 5,
+              "value": "2, MH"
+            },
+            {
+              "entity_id": "S3-392308440",
+              "length": 5,
+              "value": "3, DL"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S3-235241639",
+              "length": 267,
+              "value": "Orange Business Centre 1St- Floor Greater Visakhapatnam Smart City Corporation Limited, Building Plot No 21, Behind Ambica Sea Green Hotel, Near Victory At Sea Memorial, Kirlampudi Layout, Beach Road, Visakhapatnam (Urban), Vishakhapatnam, Visakhapatnam, ఆంధ్రప్రదేశ్"
+            },
+            {
+              "entity_id": "S3-132921109",
+              "length": 257,
+              "value": "Orange Business Centre 1St- Floor Greater Visakhapatnam Smart City Corporation Limited, Building Plot No 21, Behind Ambica Sea Green Hotel, Near Victory At Sea Memorial, Kirlampudi Layout, Beach Road, Visakhapatnam (Urban), Visakhapatnam, Vishakhapatnam, AP"
+            },
+            {
+              "entity_id": "S3-305307032",
+              "length": 239,
+              "value": "B-02 B 119/16 Part, 123/5A Part, 123/58, 123/5C Part, 124/1 Part, 125/1 Part, 125/2 Part, 125/3 Part, 125/4 Part, 126 Part And 138/3 Part, Walajabad Road, Varanavasi Village, Walajabad Taluk, Oragadam, Sriperumbudur, Kanchipuram, தமிழ்நாடு"
+            },
+            {
+              "entity_id": "S3-251925970",
+              "length": 238,
+              "value": "Industrial Unit No. B 09 Second Floor Regency, Plaza 1 Co Operative Premises Society Limited Formerly Known As Regency Plaza Building No. 1, Near Valduni Bridge, Kalyan, Ambernath Road Shanti Nagar, Ulhasnagar 3, Kalyan, Thane, महाराष्ट्र"
+            },
+            {
+              "entity_id": "S3-385601110",
+              "length": 236,
+              "value": "O2 B04, Survey Nos. 119/1C Part, 119/2A Part, 119/2C Part, 120/1 Part, 120/2 Part, 120/3 Part And 122/1 Part, Esr Oragadam Industrial And Logistics Park, Oragadam - Walajabad Road, Walajabad Taluk, Kancheepuram, Sriperumbudur, தமிழ்நாடு"
+            }
+          ]
+        },
+        "country": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S3-100000048",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S3-100000186",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S3-10000034",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S3-100000622",
+              "length": 2,
+              "value": "US"
+            },
+            {
+              "entity_id": "S3-100000794",
+              "length": 2,
+              "value": "US"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S3-100000895",
+              "length": 6,
+              "value": "France"
+            },
+            {
+              "entity_id": "S3-100003504",
+              "length": 6,
+              "value": "France"
+            },
+            {
+              "entity_id": "S3-10000857",
+              "length": 6,
+              "value": "France"
+            },
+            {
+              "entity_id": "S3-100011419",
+              "length": 6,
+              "value": "France"
+            },
+            {
+              "entity_id": "S3-100013035",
+              "length": 6,
+              "value": "France"
+            }
+          ]
+        },
+        "business_name_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S3-803139892",
+              "length": 2,
+              "value": "#1"
+            },
+            {
+              "entity_id": "S3-157239907",
+              "length": 2,
+              "value": "#3"
+            },
+            {
+              "entity_id": "S3-631447423",
+              "length": 2,
+              "value": "#7"
+            },
+            {
+              "entity_id": "S3-978810779",
+              "length": 2,
+              "value": "#9"
+            },
+            {
+              "entity_id": "S3-701504574",
+              "length": 2,
+              "value": "#g"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S3-493326166",
+              "length": 103,
+              "value": "cirapyra f/k/a swayam siddhi commercialcomplex exhibition road ps- gandhi maidan veneer private limited"
+            },
+            {
+              "entity_id": "S3-74994557",
+              "length": 102,
+              "value": "evaan group of companies of whitefield roadsadaramangala indl area mahadevapura post overseas pvt ltd."
+            },
+            {
+              "entity_id": "S3-749133717",
+              "length": 101,
+              "value": "moon infotech of saranya nagar layout kundrathur thirumudivakkam main road industries ltd (id: 18513)"
+            },
+            {
+              "entity_id": "S3-124234492",
+              "length": 99,
+              "value": "pmc lights (india)-sivakasi co-operativeindustrial estate srivilliputtur rd enterprises corporation"
+            },
+            {
+              "entity_id": "S3-199593588",
+              "length": 97,
+              "value": "calokor labs d/b/a sant deep buildingsevoke road wef 24 12 2001 ps siliguri foods private limited"
+            }
+          ]
+        },
+        "business_address_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S3-85969735",
+              "length": 5,
+              "value": "1, ap"
+            },
+            {
+              "entity_id": "S3-336421409",
+              "length": 5,
+              "value": "1, wb"
+            },
+            {
+              "entity_id": "S3-141403605",
+              "length": 5,
+              "value": "2, mh"
+            },
+            {
+              "entity_id": "S3-952741851",
+              "length": 5,
+              "value": "2, mh"
+            },
+            {
+              "entity_id": "S3-392308440",
+              "length": 5,
+              "value": "3, dl"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S3-235241639",
+              "length": 267,
+              "value": "orange business centre 1st- floor greater visakhapatnam smart city corporation limited, building plot no 21, behind ambica sea green hotel, near victory at sea memorial, kirlampudi layout, beach road, visakhapatnam (urban), vishakhapatnam, visakhapatnam, ఆంధ్రప్రదేశ్"
+            },
+            {
+              "entity_id": "S3-132921109",
+              "length": 257,
+              "value": "orange business centre 1st- floor greater visakhapatnam smart city corporation limited, building plot no 21, behind ambica sea green hotel, near victory at sea memorial, kirlampudi layout, beach road, visakhapatnam (urban), visakhapatnam, vishakhapatnam, ap"
+            },
+            {
+              "entity_id": "S3-305307032",
+              "length": 239,
+              "value": "b-02 b 119/16 part, 123/5a part, 123/58, 123/5c part, 124/1 part, 125/1 part, 125/2 part, 125/3 part, 125/4 part, 126 part and 138/3 part, walajabad road, varanavasi village, walajabad taluk, oragadam, sriperumbudur, kanchipuram, தமிழ்நாடு"
+            },
+            {
+              "entity_id": "S3-251925970",
+              "length": 238,
+              "value": "industrial unit no. b 09 second floor regency, plaza 1 co operative premises society limited formerly known as regency plaza building no. 1, near valduni bridge, kalyan, ambernath road shanti nagar, ulhasnagar 3, kalyan, thane, महाराष्ट्र"
+            },
+            {
+              "entity_id": "S3-385601110",
+              "length": 236,
+              "value": "o2 b04, survey nos. 119/1c part, 119/2a part, 119/2c part, 120/1 part, 120/2 part, 120/3 part and 122/1 part, esr oragadam industrial and logistics park, oragadam - walajabad road, walajabad taluk, kancheepuram, sriperumbudur, தமிழ்நாடு"
+            }
+          ]
+        },
+        "country_normalized": {
+          "shortest_non_empty": [
+            {
+              "entity_id": "S3-100000048",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S3-100000186",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S3-10000034",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S3-100000622",
+              "length": 2,
+              "value": "us"
+            },
+            {
+              "entity_id": "S3-100000794",
+              "length": 2,
+              "value": "us"
+            }
+          ],
+          "longest": [
+            {
+              "entity_id": "S3-100000895",
+              "length": 6,
+              "value": "france"
+            },
+            {
+              "entity_id": "S3-100003504",
+              "length": 6,
+              "value": "france"
+            },
+            {
+              "entity_id": "S3-10000857",
+              "length": 6,
+              "value": "france"
+            },
+            {
+              "entity_id": "S3-100011419",
+              "length": 6,
+              "value": "france"
+            },
+            {
+              "entity_id": "S3-100013035",
+              "length": 6,
+              "value": "france"
+            }
+          ]
+        }
+      },
+      "duplicate_looking_normalized_value_counts": {
+        "normalized_name": {
+          "unique_values_with_duplicates": 301519,
+          "total_duplicate_rows": 1026371
+        },
+        "normalized_address": {
+          "unique_values_with_duplicates": 409009,
+          "total_duplicate_rows": 905039
+        },
+        "full_normalized_record": {
+          "unique_tuples_with_duplicates": 27643,
+          "total_duplicate_rows": 56220
+        }
+      },
+      "duplicate_entity_id_findings": [],
+      "malformed_row_findings": [],
+      "country_frequency_counts": {
+        "India": 2405000,
+        "France": 731615,
+        "US": 1945701
+      },
+      "preservation_checks": {
+        "row_order_and_ids_preserved": true,
+        "original_fields_unaltered": true,
+        "entity_ids_preserved": true,
+        "row_count_preserved": true
+      }
+    }
+  }
+}
