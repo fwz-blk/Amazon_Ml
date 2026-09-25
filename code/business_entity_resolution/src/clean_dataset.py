@@ -5,23 +5,26 @@ Stage 1: Conservative Data Cleaning, Validation, and Profiling
 
 Core Principles:
 1. Strict raw-data preservation:
-   - Original input files are never modified.
+   - Raw input files under student_resource/dataset are never modified.
    - No rows are deleted, deduplicated, reordered, filtered, merged, or altered.
-   - All four original columns (entity_id, business_name, business_address, country)
-     are preserved byte-for-byte in the cleaned output.
+   - Original parsed field values are retained in the first four output columns.
+   - Output files are deterministic UTF-8 TSV serializations.
 2. Conservative normalization applied ONLY to derived columns:
    - Unicode NFC normalization.
    - Non-Latin scripts (Hindi, Arabic, French accents, Cyrillic, etc.) preserved.
    - Unicode-aware casefold().
    - Safe punctuation equivalences only (curly quotes -> straight, unicode dashes -> hyphen).
+   - Primes (U+2032/U+2033) and language-specific modifier letters remain untouched.
    - Meaningful punctuation preserved (&, -, ., ', /, @, +, #, commas, parens).
-   - Whitespace runs and noise collapsed to single ASCII space; stripped.
+   - Whitespace runs and noise (including BOM/zero-width space) collapsed to single ASCII space; stripped.
    - Country normalized using only NFC + casefold() + whitespace normalization.
    - Missing fields flagged with boolean indicators and kept empty (no placeholders).
 3. Structural integrity & quality gates:
    - Validates input UTF-8, headers, column counts, entity_id format & uniqueness.
-   - Bounded-memory streaming execution (line-by-line / chunked).
-   - Writes to temporary files and atomically renames only upon passing all checks.
+   - Bounded in-memory streaming transformation with disk-backed SQLite aggregation
+     for exact uniqueness and collision-resistant SHA-256 duplicate profiling.
+   - Staged generation directory with atomic publication and rollback-safe replacement.
+   - Recomputes all normalized values during quality verification to guarantee 100% derivation accuracy.
    - Produces diagnostic profile.json and quality_checks.json reports.
 """
 
@@ -29,15 +32,17 @@ from __future__ import annotations
 
 import argparse
 import gc
+import hashlib
 import itertools
 import json
 import os
 import re
+import shutil
+import sqlite3
 import sys
 import time
 import unicodedata
 from collections import Counter
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -68,28 +73,22 @@ DEFAULT_EXPECTED_PREFIXES = {
     "source3": "S3-",
 }
 
-# Explicitly documented safe punctuation equivalences
-# Maps Unicode variants to ASCII standard representations
+# Narrowed, explicitly documented safe punctuation equivalences
+# Primes (U+2032/U+2033) and modifier letters (U+02BB/U+02BC) are explicitly NOT mapped.
 SAFE_PUNCTUATION_TRANSLATION = {
-    # Curly single quotes & apostrophe variants -> straight single quote (')
+    # Curly single quotes -> straight single quote (')
     ord("‘"): "'",  # U+2018 LEFT SINGLE QUOTATION MARK
     ord("’"): "'",  # U+2019 RIGHT SINGLE QUOTATION MARK
     ord("‚"): "'",  # U+201A SINGLE LOW-9 QUOTATION MARK
     ord("‛"): "'",  # U+201B SINGLE HIGH-REVERSED-9 QUOTATION MARK
-    ord("ʻ"): "'",  # U+02BB MODIFIER LETTER TURNED COMMA
-    ord("ʼ"): "'",  # U+02BC MODIFIER LETTER APOSTROPHE
-    ord("′"): "'",  # U+2032 PRIME
-    ord("‵"): "'",  # U+2035 REVERSED PRIME
 
     # Curly double quotes -> straight double quote (")
     ord("“"): '"',  # U+201C LEFT DOUBLE QUOTATION MARK
     ord("”"): '"',  # U+201D RIGHT DOUBLE QUOTATION MARK
     ord("„"): '"',  # U+201E DOUBLE LOW-9 QUOTATION MARK
     ord("‟"): '"',  # U+201F DOUBLE HIGH-REVERSED-9 QUOTATION MARK
-    ord("″"): '"',  # U+2033 DOUBLE PRIME
-    ord("‶"): '"',  # U+2036 REVERSED DOUBLE PRIME
 
-    # Unicode dash variants -> ASCII hyphen (-)
+    # Documented Unicode dash variants -> ASCII hyphen (-)
     ord("‐"): "-",  # U+2010 HYPHEN
     ord("‑"): "-",  # U+2011 NON-BREAKING HYPHEN
     ord("‒"): "-",  # U+2012 FIGURE DASH
@@ -125,6 +124,9 @@ SAFE_PUNCTUATION_TRANSLATION = {
 
 # Compiled regex for collapsing Unicode whitespace, tabs, and newlines
 RE_WHITESPACE = re.compile(r"\s+", flags=re.UNICODE)
+
+# Regex matching missing values: empty or purely Unicode whitespace / BOM / zero-width space
+RE_MISSING_WHITESPACE = re.compile(r"^[\s\ufeff\u200b]*$", flags=re.UNICODE)
 
 
 # ==============================================================================
@@ -162,11 +164,13 @@ class QualityCheckError(Exception):
 def is_missing_value(val: Optional[str]) -> bool:
     """
     Check if a source field value is missing.
-    Empty strings and whitespace-only strings are considered missing.
+    Empty strings, whitespace-only strings, BOM (\ufeff), and zero-width spaces
+    are considered missing. Real business names such as 'NAN', 'Null', or 'None'
+    are preserved and NOT considered missing.
     """
     if val is None or len(val) == 0:
         return True
-    return val.strip() == ""
+    return bool(RE_MISSING_WHITESPACE.match(val))
 
 
 def normalize_text(text: Optional[str]) -> str:
@@ -174,19 +178,20 @@ def normalize_text(text: Optional[str]) -> str:
     Conservative normalization applied ONLY to business_name and business_address.
 
     Rules applied:
-    1. Unicode NFC normalization.
-    2. Safe punctuation equivalences:
+    1. Check missingness: empty, whitespace-only, or BOM-only returns "".
+    2. Unicode NFC normalization.
+    3. Safe punctuation equivalences:
        - curly single quotes -> straight single quote (')
        - curly double quotes -> straight double quote (")
        - Unicode dash variants -> ASCII hyphen (-)
-       - Unicode space variants -> ASCII space (' ')
-    3. Unicode-aware casefold().
-    4. Re-apply Unicode NFC normalization (ensures canonical composition after casefold).
-    5. Treat Unicode whitespace, tabs, and embedded newlines as noise:
+       - Unicode space variants & BOM -> ASCII space (' ')
+    4. Unicode-aware casefold().
+    5. Re-apply Unicode NFC normalization (ensures canonical composition after casefold).
+    6. Treat Unicode whitespace, tabs, and embedded newlines as noise:
        replace whitespace runs with a single ASCII space and strip ends.
-    6. Non-Latin scripts (Hindi, Arabic, Cyrillic, CJK, etc.) and accents are strictly preserved.
-    7. Meaningful punctuation (&, -, ., ', /, @, +, #, commas, parens) is preserved.
-    8. Missing values return empty string ("").
+    7. Non-Latin scripts (Hindi, Arabic, Cyrillic, CJK, etc.) and accents are strictly preserved.
+    8. Meaningful punctuation (&, -, ., ', /, @, +, #, commas, parens) is preserved.
+    9. Primes (U+2032/U+2033) and language-specific modifier letters remain untouched.
     """
     if is_missing_value(text):
         return ""
@@ -194,7 +199,7 @@ def normalize_text(text: Optional[str]) -> str:
     assert text is not None
     # 1. NFC normalization
     s = unicodedata.normalize("NFC", text)
-    # 2. Safe punctuation equivalences
+    # 2. Safe punctuation translation
     s = s.translate(SAFE_PUNCTUATION_TRANSLATION)
     # 3. Unicode-aware casefold
     s = s.casefold()
@@ -208,9 +213,10 @@ def normalize_text(text: Optional[str]) -> str:
 def normalize_country(text: Optional[str]) -> str:
     """
     Country normalization using ONLY:
+    - Missingness check
     - Unicode NFC
     - Unicode casefold()
-    - whitespace normalization
+    - Whitespace normalization
 
     Does NOT hard-code country names or apply alias maps.
     Missing values return empty string ("").
@@ -293,6 +299,159 @@ def get_expected_prefix(filename: str, custom_prefix: Optional[str] = None) -> s
 
 
 # ==============================================================================
+# Disk-Backed Profiler (Bounded-Memory & Collision-Resistant)
+# ==============================================================================
+
+class DiskBackedProfiler:
+    """
+    Disk-backed profiler providing exact entity_id uniqueness validation,
+    exact collision-resistant SHA-256 duplicate metrics, and country frequency counts
+    with strictly bounded in-memory footprint.
+
+    Ephemeral SQLite tables with capped in-memory page cache (4MB) ensure that memory
+    usage is strictly bounded regardless of dataset scale.
+    """
+
+    def __init__(self, db_path: Path):
+        self.db_path = db_path
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.con = sqlite3.connect(str(db_path))
+        self.cur = self.con.cursor()
+        self.cur.execute("PRAGMA synchronous = OFF")
+        self.cur.execute("PRAGMA journal_mode = OFF")
+        self.cur.execute("PRAGMA cache_size = -4000")  # Capped at ~4MB RAM
+
+        self.cur.execute("CREATE TABLE entity_ids (eid TEXT PRIMARY KEY)")
+        self.cur.execute("CREATE TABLE name_digests (digest TEXT PRIMARY KEY, cnt INTEGER)")
+        self.cur.execute("CREATE TABLE addr_digests (digest TEXT PRIMARY KEY, cnt INTEGER)")
+        self.cur.execute("CREATE TABLE record_digests (digest TEXT PRIMARY KEY, cnt INTEGER)")
+        self.cur.execute("CREATE TABLE countries (country TEXT PRIMARY KEY, cnt INTEGER)")
+
+        self.batch_size = 50000
+        self.eid_batch: List[Tuple[str]] = []
+        self.name_batch: List[Tuple[str]] = []
+        self.addr_batch: List[Tuple[str]] = []
+        self.record_batch: List[Tuple[str]] = []
+        self.country_batch: List[Tuple[str]] = []
+
+    def record_row(
+        self,
+        entity_id: str,
+        name_norm: str,
+        addr_norm: str,
+        ctry_norm: str,
+        raw_country: str,
+    ) -> None:
+        self.eid_batch.append((entity_id,))
+        if raw_country:
+            self.country_batch.append((raw_country,))
+
+        if name_norm:
+            d_name = hashlib.sha256(name_norm.encode("utf-8")).hexdigest()
+            self.name_batch.append((d_name,))
+
+        if addr_norm:
+            d_addr = hashlib.sha256(addr_norm.encode("utf-8")).hexdigest()
+            self.addr_batch.append((d_addr,))
+
+        d_record = hashlib.sha256(f"{name_norm}\t{addr_norm}\t{ctry_norm}".encode("utf-8")).hexdigest()
+        self.record_batch.append((d_record,))
+
+        if len(self.eid_batch) >= self.batch_size:
+            self.flush()
+
+    def flush(self) -> None:
+        if self.eid_batch:
+            try:
+                self.cur.executemany("INSERT INTO entity_ids VALUES (?)", self.eid_batch)
+            except sqlite3.IntegrityError as e:
+                # Find the duplicate entity ID
+                for (eid,) in self.eid_batch:
+                    self.cur.execute("SELECT eid FROM entity_ids WHERE eid = ?", (eid,))
+                    if self.cur.fetchone():
+                        raise StructuralIntegrityError(
+                            str(self.db_path), 0, f"Duplicate entity_id detected: '{eid}'"
+                        ) from e
+                    self.cur.execute("INSERT INTO entity_ids VALUES (?)", (eid,))
+            self.eid_batch.clear()
+
+        if self.name_batch:
+            self.cur.executemany(
+                "INSERT INTO name_digests VALUES (?, 1) ON CONFLICT(digest) DO UPDATE SET cnt = cnt + 1",
+                self.name_batch,
+            )
+            self.name_batch.clear()
+
+        if self.addr_batch:
+            self.cur.executemany(
+                "INSERT INTO addr_digests VALUES (?, 1) ON CONFLICT(digest) DO UPDATE SET cnt = cnt + 1",
+                self.addr_batch,
+            )
+            self.addr_batch.clear()
+
+        if self.record_batch:
+            self.cur.executemany(
+                "INSERT INTO record_digests VALUES (?, 1) ON CONFLICT(digest) DO UPDATE SET cnt = cnt + 1",
+                self.record_batch,
+            )
+            self.record_batch.clear()
+
+        if self.country_batch:
+            self.cur.executemany(
+                "INSERT INTO countries VALUES (?, 1) ON CONFLICT(country) DO UPDATE SET cnt = cnt + 1",
+                self.country_batch,
+            )
+            self.country_batch.clear()
+
+        self.con.commit()
+
+    def get_duplicate_metrics(self) -> Dict[str, Any]:
+        self.flush()
+
+        self.cur.execute("SELECT count(*), coalesce(sum(cnt), 0) FROM name_digests WHERE cnt > 1")
+        name_unique, name_total = self.cur.fetchone()
+
+        self.cur.execute("SELECT count(*), coalesce(sum(cnt), 0) FROM addr_digests WHERE cnt > 1")
+        addr_unique, addr_total = self.cur.fetchone()
+
+        self.cur.execute("SELECT count(*), coalesce(sum(cnt), 0) FROM record_digests WHERE cnt > 1")
+        rec_unique, rec_total = self.cur.fetchone()
+
+        return {
+            "digest_algorithm": "sha256",
+            "storage_backend": "disk_backed_sqlite",
+            "normalized_name": {
+                "unique_values_with_duplicates": name_unique,
+                "total_duplicate_rows": name_total,
+            },
+            "normalized_address": {
+                "unique_values_with_duplicates": addr_unique,
+                "total_duplicate_rows": addr_total,
+            },
+            "full_normalized_record": {
+                "unique_tuples_with_duplicates": rec_unique,
+                "total_duplicate_rows": rec_total,
+            },
+        }
+
+    def get_country_counts(self) -> Dict[str, int]:
+        self.flush()
+        self.cur.execute("SELECT country, cnt FROM countries")
+        return dict(self.cur.fetchall())
+
+    def close(self) -> None:
+        try:
+            self.con.close()
+        except Exception:
+            pass
+        if self.db_path.exists():
+            try:
+                self.db_path.unlink()
+            except OSError:
+                pass
+
+
+# ==============================================================================
 # Bounded Binned Quantile & Length Profiler
 # ==============================================================================
 
@@ -300,7 +459,7 @@ class LengthProfiler:
     """
     Computes exact summary statistics (min, max, mean, quantiles) and maintains
     bounded deterministic top-k shortest non-empty and longest string examples
-    in strictly bounded memory.
+    in strictly bounded memory using an integer histogram of text lengths.
     """
 
     def __init__(self, max_examples: int = 5):
@@ -310,7 +469,6 @@ class LengthProfiler:
         self.sum_len: int = 0
         self.length_histogram: Counter[int] = Counter()
         self.max_examples: int = max_examples
-        # Store tuples: (length, value, entity_id)
         self.shortest_examples: List[Tuple[int, str, str]] = []
         self.longest_examples: List[Tuple[int, str, str]] = []
 
@@ -329,7 +487,6 @@ class LengthProfiler:
         self.sum_len += length
         self.length_histogram[length] += 1
 
-        # Maintain bounded deterministic shortest non-empty examples
         if length > 0:
             item = (length, val, entity_id)
             if len(self.shortest_examples) < self.max_examples:
@@ -339,8 +496,6 @@ class LengthProfiler:
                 self.shortest_examples[-1] = item
                 self.shortest_examples.sort()
 
-        # Maintain bounded deterministic longest examples
-        # Use negative length for sorting or sort by (-length, value, entity_id)
         longest_item = (-length, val, entity_id)
         if len(self.longest_examples) < self.max_examples:
             self.longest_examples.append(longest_item)
@@ -398,24 +553,26 @@ class LengthProfiler:
 
 
 # ==============================================================================
-# Input Validation (Integrity Gate)
+# Mandatory Input Validation Gate
 # ==============================================================================
 
 def validate_input_file(
     file_path: Path,
     expected_prefix: str = "",
-    check_unique_ids: bool = True,
+    temp_dir: Optional[Path] = None,
 ) -> int:
     """
     Validate raw input file integrity before writing any cleaned output.
+    Uses a disk-backed SQLite index to check entity_id uniqueness with strictly
+    bounded memory.
 
-    Checks:
-    - File readability as UTF-8
+    Non-negotiable checks:
+    - UTF-8 readability
     - Exact expected header: entity_id\\tbusiness_name\\tbusiness_address\\tcountry
     - Exactly 4 tab-separated columns per row
     - Non-empty entity_id
     - entity_id prefix consistency
-    - Unique entity_id values (tracked with bounded memory per file)
+    - Unique entity_id values (disk-backed SQLite table)
     - No malformed rows
 
     Raises:
@@ -426,12 +583,22 @@ def validate_input_file(
     if not file_path.is_file():
         raise StructuralIntegrityError(str(file_path), 0, "Input file does not exist")
 
-    seen_ids: Set[str] = set() if check_unique_ids else set()
+    # Ephemeral SQLite database for entity_id uniqueness check
+    scratch_dir = temp_dir or file_path.parent
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    db_file = scratch_dir / f".val_{file_path.name}_{int(time.time()*1000)}.db"
+    con = sqlite3.connect(str(db_file))
+    cur = con.cursor()
+    cur.execute("PRAGMA synchronous = OFF")
+    cur.execute("PRAGMA journal_mode = OFF")
+    cur.execute("PRAGMA cache_size = -4000")
+    cur.execute("CREATE TABLE eids (eid TEXT PRIMARY KEY)")
+
+    batch: List[Tuple[str]] = []
     line_number = 0
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            # Check header
             header_line = f.readline()
             line_number = 1
             if not header_line:
@@ -445,7 +612,6 @@ def validate_input_file(
                     f"Invalid header: expected {INPUT_COLUMNS}, found {header_cols}",
                 )
 
-            # Check rows
             for line in f:
                 line_number += 1
                 cols = line.rstrip("\r\n").split("\t")
@@ -469,25 +635,56 @@ def validate_input_file(
                         f"Inconsistent entity_id prefix: '{entity_id}' does not start with expected prefix '{expected_prefix}'",
                     )
 
-                if check_unique_ids:
-                    if entity_id in seen_ids:
-                        raise StructuralIntegrityError(
-                            str(file_path),
-                            line_number,
-                            f"Duplicate entity_id detected: '{entity_id}'",
-                        )
-                    seen_ids.add(entity_id)
+                batch.append((entity_id,))
+                if len(batch) >= 50000:
+                    try:
+                        cur.executemany("INSERT INTO eids VALUES (?)", batch)
+                        con.commit()
+                        batch.clear()
+                    except sqlite3.IntegrityError:
+                        for (eid,) in batch:
+                            cur.execute("SELECT eid FROM eids WHERE eid = ?", (eid,))
+                            if cur.fetchone():
+                                raise StructuralIntegrityError(
+                                    str(file_path),
+                                    line_number,
+                                    f"Duplicate entity_id detected: '{eid}'",
+                                )
+                            cur.execute("INSERT INTO eids VALUES (?)", (eid,))
+                        con.commit()
+                        batch.clear()
+
+            if batch:
+                try:
+                    cur.executemany("INSERT INTO eids VALUES (?)", batch)
+                    con.commit()
+                    batch.clear()
+                except sqlite3.IntegrityError:
+                    for (eid,) in batch:
+                        cur.execute("SELECT eid FROM eids WHERE eid = ?", (eid,))
+                        if cur.fetchone():
+                            raise StructuralIntegrityError(
+                                str(file_path),
+                                line_number,
+                                f"Duplicate entity_id detected: '{eid}'",
+                            )
+                        cur.execute("INSERT INTO eids VALUES (?)", (eid,))
+                    con.commit()
+                    batch.clear()
 
     except UnicodeDecodeError as e:
         raise StructuralIntegrityError(
             str(file_path), line_number, f"UTF-8 decode failure: {e}"
         ) from e
+    finally:
+        con.close()
+        if db_file.exists():
+            try:
+                db_file.unlink()
+            except OSError:
+                pass
 
     total_rows = line_number - 1
-    # Free memory
-    del seen_ids
-    gc.collect()
-
     return total_rows
 
 
@@ -497,30 +694,32 @@ def validate_input_file(
 
 def clean_and_profile_file(
     input_path: Path,
-    temp_output_path: Path,
+    staged_output_path: Path,
     expected_prefix: str = "",
+    temp_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """
     Streams raw input file, normalizes derived fields, writes cleaned output
-    to temp_output_path, and computes comprehensive profiling diagnostics.
+    to staged_output_path, and computes comprehensive profiling diagnostics
+    via DiskBackedProfiler.
 
     Memory bounded:
-    - Processes row-by-row with minimal buffer allocations.
-    - Tracks duplicate counts via two-stage integer hash sets (freed upon completion).
-    - Length histograms and examples are bounded O(1).
+    - Processes row-by-row with streaming I/O.
+    - Aggregates duplicate metrics and entity IDs via disk-backed SQLite tables.
+    - Text length histograms and examples use bounded O(1) in-memory storage.
     """
-    temp_output_path.parent.mkdir(parents=True, exist_ok=True)
+    staged_output_path.parent.mkdir(parents=True, exist_ok=True)
+    scratch_dir = temp_dir or staged_output_path.parent
+    db_path = scratch_dir / f".prof_{input_path.name}_{int(time.time()*1000)}.db"
+    profiler = DiskBackedProfiler(db_path)
 
-    # Profiling structures
     row_count = 0
     missing_counts = {col: 0 for col in INPUT_COLUMNS[1:]}
     empty_string_counts = {col: 0 for col in INPUT_COLUMNS[1:]}
     non_ascii_counts = {col: 0 for col in INPUT_COLUMNS[1:]}
     script_counts: Dict[str, Counter[str]] = {col: Counter() for col in INPUT_COLUMNS[1:]}
     suspicious_symbols: Dict[str, Counter[str]] = {col: Counter() for col in INPUT_COLUMNS[1:]}
-    country_counts: Counter[str] = Counter()
 
-    # Length profilers
     length_profilers = {
         "business_name": LengthProfiler(),
         "business_address": LengthProfiler(),
@@ -530,203 +729,114 @@ def clean_and_profile_file(
         "country_normalized": LengthProfiler(),
     }
 
-    # Bounded duplicate tracking via two-set hash state
-    # Seen once vs seen multiple
-    name_seen_once: Set[int] = set()
-    name_seen_multiple: Set[int] = set()
-    total_dup_name_rows = 0
-
-    addr_seen_once: Set[int] = set()
-    addr_seen_multiple: Set[int] = set()
-    total_dup_addr_rows = 0
-
-    full_seen_once: Set[int] = set()
-    full_seen_multiple: Set[int] = set()
-    total_dup_full_rows = 0
-
-    duplicate_eids: List[str] = []
-    seen_eids: Set[str] = set()
-    malformed_findings: List[Dict[str, Any]] = []
-
     line_num = 0
 
-    with open(input_path, "r", encoding="utf-8") as in_f, \
-         open(temp_output_path, "w", encoding="utf-8", newline="\n") as out_f:
+    try:
+        with open(input_path, "r", encoding="utf-8") as in_f, \
+             open(staged_output_path, "w", encoding="utf-8", newline="\n") as out_f:
 
-        # Header check & write
-        header_line = in_f.readline()
-        line_num = 1
-        raw_header = header_line.rstrip("\r\n").split("\t")
-        if raw_header != INPUT_COLUMNS:
-            raise StructuralIntegrityError(
-                str(input_path), 1, f"Expected header {INPUT_COLUMNS}, got {raw_header}"
-            )
-
-        out_header = "\t".join(OUTPUT_COLUMNS) + "\n"
-        out_f.write(out_header)
-
-        # Stream lines
-        for line in in_f:
-            line_num += 1
-            cols = line.rstrip("\r\n").split("\t")
-            if len(cols) != 4:
-                malformed_findings.append({
-                    "line": line_num,
-                    "expected": 4,
-                    "found": len(cols),
-                })
+            header_line = in_f.readline()
+            line_num = 1
+            raw_header = header_line.rstrip("\r\n").split("\t")
+            if raw_header != INPUT_COLUMNS:
                 raise StructuralIntegrityError(
-                    str(input_path), line_num, f"Malformed row with {len(cols)} columns"
+                    str(input_path), 1, f"Expected header {INPUT_COLUMNS}, got {raw_header}"
                 )
 
-            entity_id, b_name, b_addr, country = cols
-            row_count += 1
+            out_header = "\t".join(OUTPUT_COLUMNS) + "\n"
+            out_f.write(out_header)
 
-            # Validate entity_id
-            if expected_prefix and not entity_id.startswith(expected_prefix):
-                raise StructuralIntegrityError(
-                    str(input_path),
-                    line_num,
-                    f"Prefix mismatch for entity_id '{entity_id}', expected '{expected_prefix}'",
+            for line in in_f:
+                line_num += 1
+                cols = line.rstrip("\r\n").split("\t")
+                if len(cols) != 4:
+                    raise StructuralIntegrityError(
+                        str(input_path), line_num, f"Malformed row with {len(cols)} columns"
+                    )
+
+                entity_id, b_name, b_addr, country = cols
+                row_count += 1
+
+                if expected_prefix and not entity_id.startswith(expected_prefix):
+                    raise StructuralIntegrityError(
+                        str(input_path),
+                        line_num,
+                        f"Prefix mismatch for entity_id '{entity_id}', expected '{expected_prefix}'",
+                    )
+
+                name_missing = is_missing_value(b_name)
+                addr_missing = is_missing_value(b_addr)
+                ctry_missing = is_missing_value(country)
+
+                if name_missing:
+                    missing_counts["business_name"] += 1
+                    if b_name == "":
+                        empty_string_counts["business_name"] += 1
+                if addr_missing:
+                    missing_counts["business_address"] += 1
+                    if b_addr == "":
+                        empty_string_counts["business_address"] += 1
+                if ctry_missing:
+                    missing_counts["country"] += 1
+                    if country == "":
+                        empty_string_counts["country"] += 1
+
+                for col_name, val in (
+                    ("business_name", b_name),
+                    ("business_address", b_addr),
+                    ("country", country),
+                ):
+                    if val:
+                        if not val.isascii():
+                            non_ascii_counts[col_name] += 1
+                            for char in val:
+                                if ord(char) >= 128:
+                                    script_counts[col_name][get_script_category(char)] += 1
+                                susp = is_suspicious_symbol(char)
+                                if susp:
+                                    suspicious_symbols[col_name][susp] += 1
+                        else:
+                            for char in val:
+                                susp = is_suspicious_symbol(char)
+                                if susp:
+                                    suspicious_symbols[col_name][susp] += 1
+
+                name_norm = normalize_text(b_name)
+                addr_norm = normalize_text(b_addr)
+                ctry_norm = normalize_country(country)
+
+                length_profilers["business_name"].update(b_name, entity_id)
+                length_profilers["business_address"].update(b_addr, entity_id)
+                length_profilers["country"].update(country, entity_id)
+                length_profilers["business_name_normalized"].update(name_norm, entity_id)
+                length_profilers["business_address_normalized"].update(addr_norm, entity_id)
+                length_profilers["country_normalized"].update(ctry_norm, entity_id)
+
+                profiler.record_row(entity_id, name_norm, addr_norm, ctry_norm, country)
+
+                out_row = (
+                    f"{entity_id}\t"
+                    f"{b_name}\t"
+                    f"{b_addr}\t"
+                    f"{country}\t"
+                    f"{name_norm}\t"
+                    f"{addr_norm}\t"
+                    f"{ctry_norm}\t"
+                    f"{str(name_missing)}\t"
+                    f"{str(addr_missing)}\t"
+                    f"{str(ctry_missing)}\n"
                 )
+                out_f.write(out_row)
 
-            if entity_id in seen_eids:
-                if len(duplicate_eids) < 10:
-                    duplicate_eids.append(entity_id)
-            else:
-                seen_eids.add(entity_id)
+            out_f.flush()
+            os.fsync(out_f.fileno())
 
-            # Missingness checks
-            name_missing = is_missing_value(b_name)
-            addr_missing = is_missing_value(b_addr)
-            ctry_missing = is_missing_value(country)
+        dup_metrics = profiler.get_duplicate_metrics()
+        country_counts = profiler.get_country_counts()
 
-            if name_missing:
-                missing_counts["business_name"] += 1
-                if b_name == "":
-                    empty_string_counts["business_name"] += 1
-            if addr_missing:
-                missing_counts["business_address"] += 1
-                if b_addr == "":
-                    empty_string_counts["business_address"] += 1
-            if ctry_missing:
-                missing_counts["country"] += 1
-                if country == "":
-                    empty_string_counts["country"] += 1
+    finally:
+        profiler.close()
 
-            # Country frequency
-            country_counts[country] += 1
-
-            # Script & Symbol Profiling
-            for col_name, val in (
-                ("business_name", b_name),
-                ("business_address", b_addr),
-                ("country", country),
-            ):
-                if val:
-                    if not val.isascii():
-                        non_ascii_counts[col_name] += 1
-                        for char in val:
-                            if ord(char) >= 128:
-                                script_counts[col_name][get_script_category(char)] += 1
-                            susp = is_suspicious_symbol(char)
-                            if susp:
-                                suspicious_symbols[col_name][susp] += 1
-                    else:
-                        for char in val:
-                            susp = is_suspicious_symbol(char)
-                            if susp:
-                                suspicious_symbols[col_name][susp] += 1
-
-            # Normalization
-            name_norm = normalize_text(b_name)
-            addr_norm = normalize_text(b_addr)
-            ctry_norm = normalize_country(country)
-
-            # Update Length Profilers
-            length_profilers["business_name"].update(b_name, entity_id)
-            length_profilers["business_address"].update(b_addr, entity_id)
-            length_profilers["country"].update(country, entity_id)
-            length_profilers["business_name_normalized"].update(name_norm, entity_id)
-            length_profilers["business_address_normalized"].update(addr_norm, entity_id)
-            length_profilers["country_normalized"].update(ctry_norm, entity_id)
-
-            # Duplicate normalized value tracking
-            # 1. Normalized name
-            if name_norm:
-                h_name = hash(name_norm)
-                if h_name in name_seen_multiple:
-                    total_dup_name_rows += 1
-                elif h_name in name_seen_once:
-                    name_seen_once.remove(h_name)
-                    name_seen_multiple.add(h_name)
-                    total_dup_name_rows += 2
-                else:
-                    name_seen_once.add(h_name)
-
-            # 2. Normalized address (exclude empty)
-            if addr_norm:
-                h_addr = hash(addr_norm)
-                if h_addr in addr_seen_multiple:
-                    total_dup_addr_rows += 1
-                elif h_addr in addr_seen_once:
-                    addr_seen_once.remove(h_addr)
-                    addr_seen_multiple.add(h_addr)
-                    total_dup_addr_rows += 2
-                else:
-                    addr_seen_once.add(h_addr)
-
-            # 3. Full normalized tuple
-            h_full = hash((name_norm, addr_norm, ctry_norm))
-            if h_full in full_seen_multiple:
-                total_dup_full_rows += 1
-            elif h_full in full_seen_once:
-                full_seen_once.remove(h_full)
-                full_seen_multiple.add(h_full)
-                total_dup_full_rows += 2
-            else:
-                full_seen_once.add(h_full)
-
-            # Write cleaned output row
-            # Boolean missing flags formatted as standard string representations ("True"/"False")
-            out_row = (
-                f"{entity_id}\t"
-                f"{b_name}\t"
-                f"{b_addr}\t"
-                f"{country}\t"
-                f"{name_norm}\t"
-                f"{addr_norm}\t"
-                f"{ctry_norm}\t"
-                f"{str(name_missing)}\t"
-                f"{str(addr_missing)}\t"
-                f"{str(ctry_missing)}\n"
-            )
-            out_f.write(out_row)
-
-    # Compute duplicate metrics before freeing structures
-    dup_metrics = {
-        "normalized_name": {
-            "unique_values_with_duplicates": len(name_seen_multiple),
-            "total_duplicate_rows": total_dup_name_rows,
-        },
-        "normalized_address": {
-            "unique_values_with_duplicates": len(addr_seen_multiple),
-            "total_duplicate_rows": total_dup_addr_rows,
-        },
-        "full_normalized_record": {
-            "unique_tuples_with_duplicates": len(full_seen_multiple),
-            "total_duplicate_rows": total_dup_full_rows,
-        },
-    }
-
-    # Free memory
-    del name_seen_once, name_seen_multiple
-    del addr_seen_once, addr_seen_multiple
-    del full_seen_once, full_seen_multiple
-    del seen_eids
-    gc.collect()
-
-    # Compile profile report for this file
     profile_data: Dict[str, Any] = {
         "file_name": input_path.name,
         "input_path": str(input_path),
@@ -761,9 +871,9 @@ def clean_and_profile_file(
             col: lp.get_examples() for col, lp in length_profilers.items()
         },
         "duplicate_looking_normalized_value_counts": dup_metrics,
-        "duplicate_entity_id_findings": duplicate_eids,
-        "malformed_row_findings": malformed_findings,
-        "country_frequency_counts": dict(country_counts),
+        "duplicate_entity_id_findings": [],
+        "malformed_row_findings": [],
+        "country_frequency_counts": country_counts,
         "preservation_checks": {
             "row_order_and_ids_preserved": True,
             "original_fields_unaltered": True,
@@ -797,7 +907,8 @@ def verify_file_quality(
     7. output_headers_correct: headers exactly match OUTPUT_COLUMNS
     8. valid_utf8_tsv: file is strictly parseable as UTF-8 TSV
     9. no_malformed_rows: exactly 10 tab-separated columns on every single line
-    10. normalized_columns_present: positions 4..6 present and correct
+    10. normalized_columns_present: normalized columns exist and contain the exact expected
+        recomputed derived values (recomputes normalize_text and normalize_country)
     11. source_prefix_validation: all IDs start with expected source prefix
     12. boolean_flags_valid: positions 7..9 strictly 'True' or 'False'
     """
@@ -823,7 +934,6 @@ def verify_file_quality(
     with open(input_path, "r", encoding="utf-8") as in_f, \
          open(cleaned_path, "r", encoding="utf-8") as out_f:
 
-        # Header check
         in_header = in_f.readline().rstrip("\r\n").split("\t")
         out_header = out_f.readline().rstrip("\r\n").split("\t")
 
@@ -855,7 +965,6 @@ def verify_file_quality(
             in_cols = in_line.rstrip("\r\n").split("\t")
             out_cols = out_line.rstrip("\r\n").split("\t")
 
-            # Check column count
             if len(out_cols) != 10:
                 invariants["no_malformed_rows"] = False
                 errors.append(f"Line {line_num}: output has {len(out_cols)} columns, expected 10")
@@ -897,8 +1006,6 @@ def verify_file_quality(
                 break
 
             # 5. Missing value fabrication check
-            # When input is missing, normalized must be "" and flag True
-            # When input is present, normalized must be non-empty and flag False
             in_name_missing = is_missing_value(in_cols[1])
             in_addr_missing = is_missing_value(in_cols[2])
             in_ctry_missing = is_missing_value(in_cols[3])
@@ -942,9 +1049,33 @@ def verify_file_quality(
                     errors.append(f"Line {line_num}: present country has empty normalized value")
                     break
 
-            # 6. Check unexpected nulls
-            # Unexpected nulls occur when null tokens ('None', 'null', 'NULL', 'NaN', 'nan') appear
-            # that were not present in the input raw source text.
+            # 6. Recompute and verify exact normalized values
+            expected_name_norm = normalize_text(in_cols[1])
+            expected_addr_norm = normalize_text(in_cols[2])
+            expected_ctry_norm = normalize_country(in_cols[3])
+
+            if out_cols[4] != expected_name_norm:
+                invariants["normalized_columns_present"] = False
+                errors.append(
+                    f"Line {line_num}: business_name_normalized mismatch: expected '{expected_name_norm}', found '{out_cols[4]}'"
+                )
+                break
+
+            if out_cols[5] != expected_addr_norm:
+                invariants["normalized_columns_present"] = False
+                errors.append(
+                    f"Line {line_num}: business_address_normalized mismatch: expected '{expected_addr_norm}', found '{out_cols[5]}'"
+                )
+                break
+
+            if out_cols[6] != expected_ctry_norm:
+                invariants["normalized_columns_present"] = False
+                errors.append(
+                    f"Line {line_num}: country_normalized mismatch: expected '{expected_ctry_norm}', found '{out_cols[6]}'"
+                )
+                break
+
+            # 7. Check unexpected nulls
             raw_map = {0: 0, 1: 1, 2: 2, 3: 3, 4: 1, 5: 2, 6: 3}
             for idx, col_val in enumerate(out_cols):
                 if col_val in ("None", "null", "NULL", "NaN", "nan"):
@@ -954,7 +1085,6 @@ def verify_file_quality(
                         break
                     raw_idx = raw_map[idx]
                     raw_val = in_cols[raw_idx]
-                    # Allowed only if the raw input value itself was that literal token
                     if raw_val != col_val and raw_val.strip().casefold() != col_val:
                         invariants["no_unexpected_nulls"] = False
                         errors.append(f"Line {line_num}: unexpected null token '{col_val}' in column {idx}")
@@ -974,22 +1104,22 @@ def verify_file_quality(
 
 
 # ==============================================================================
-# Pipeline Coordinator
+# Pipeline Coordinator with Generation Staging & Atomic Rollback
 # ==============================================================================
 
 def run_cleaning_pipeline(
     input_dir: Path,
     output_dir: Path,
     splits: List[str],
-    skip_validation: bool = False,
     quiet: bool = False,
+    _inject_publication_error: bool = False,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     Executes the complete cleaning pipeline:
-    1. Input validation pass across all target files.
-    2. Streaming cleaning and profiling to temporary files.
-    3. Quality check verification pass on temporary files.
-    4. Atomic rename and report generation upon passing all checks.
+    1. Mandatory structural integrity validation pass across all target files.
+    2. Streaming cleaning and profiling to staged generation directory.
+    3. Post-cleaning quality verification pass recomputing all derived values.
+    4. Atomic publication with automatic rollback on any replacement failure.
 
     Returns:
         (profile_report, quality_report)
@@ -1004,8 +1134,8 @@ def run_cleaning_pipeline(
         print(f"Splits to process: {splits}")
         print()
 
-    # Discover files
-    files_to_process: List[Tuple[str, Path, str]] = []  # (split, input_path, expected_prefix)
+    # Discover target files
+    files_to_process: List[Tuple[str, Path, str]] = []
     for split in splits:
         split_dir = input_dir / split
         if not split_dir.is_dir():
@@ -1019,46 +1149,45 @@ def run_cleaning_pipeline(
             prefix = DEFAULT_EXPECTED_PREFIXES[f"source{source_num}"]
             files_to_process.append((split, file_path, prefix))
 
-    # Phase 1: Input Validation
-    if not skip_validation:
+    # Phase 1: Mandatory Structural Integrity Validation
+    if not quiet:
+        print(">>> Phase 1: Validating Input File Structural Integrity (Mandatory)...")
+    for split, file_path, prefix in files_to_process:
+        t0 = time.time()
+        row_count = validate_input_file(file_path, expected_prefix=prefix, temp_dir=output_dir)
         if not quiet:
-            print(">>> Phase 1: Validating Input File Structural Integrity...")
-        for split, file_path, prefix in files_to_process:
-            t0 = time.time()
-            row_count = validate_input_file(file_path, expected_prefix=prefix)
-            if not quiet:
-                print(
-                    f"  [VALIDATED] {split}/{file_path.name} "
-                    f"({row_count:,} rows, prefix '{prefix}') in {time.time()-t0:.2f}s"
-                )
-        if not quiet:
-            print("  All input files passed structural integrity validation.\n")
+            print(
+                f"  [VALIDATED] {split}/{file_path.name} "
+                f"({row_count:,} rows, prefix '{prefix}') in {time.time()-t0:.2f}s"
+            )
+    if not quiet:
+        print("  All input files passed structural integrity validation.\n")
 
-    # Prepare temp output paths
-    # Using hidden temp files alongside target directory for guaranteed same-filesystem atomic rename
-    temp_files: List[Tuple[str, Path, Path, str]] = []
-    final_files: List[Tuple[str, Path, Path, str]] = []
+    # Phase 2 & 3: Generation Staging Directory
+    staging_dir = output_dir / f".generation_staging_{int(time.time()*1000)}_{os.getpid()}"
+    staging_dir.mkdir(parents=True, exist_ok=True)
 
+    staged_files: List[Tuple[str, Path, Path, str]] = []
     for split, in_path, prefix in files_to_process:
-        target_dir = output_dir / split
-        target_dir.mkdir(parents=True, exist_ok=True)
-        final_path = target_dir / in_path.name
-        temp_path = target_dir / f".tmp_{in_path.name}_{int(time.time())}"
-        temp_files.append((split, in_path, temp_path, prefix))
-        final_files.append((split, in_path, final_path, prefix))
+        split_stage_dir = staging_dir / split
+        split_stage_dir.mkdir(parents=True, exist_ok=True)
+        staged_path = split_stage_dir / in_path.name
+        staged_files.append((split, in_path, staged_path, prefix))
 
     profile_results: Dict[str, Any] = {}
     quality_results: Dict[str, Any] = {}
 
     try:
-        # Phase 2: Streaming Cleaning & Profiling
+        # Phase 2: Streaming Cleaning & Disk-Backed Profiling into Staging
         if not quiet:
-            print(">>> Phase 2: Streaming Cleaning & Profiling...")
-        for split, in_path, temp_path, prefix in temp_files:
+            print(">>> Phase 2: Streaming Cleaning & Profiling into Staging Directory...")
+        for split, in_path, staged_path, prefix in staged_files:
             t0 = time.time()
             if not quiet:
-                print(f"  Cleaning {split}/{in_path.name} -> {temp_path.name}...")
-            file_profile = clean_and_profile_file(in_path, temp_path, expected_prefix=prefix)
+                print(f"  Cleaning {split}/{in_path.name} -> {staged_path.relative_to(output_dir)}...")
+            file_profile = clean_and_profile_file(
+                in_path, staged_path, expected_prefix=prefix, temp_dir=staging_dir
+            )
             profile_results[f"{split}/{in_path.name}"] = file_profile
             if not quiet:
                 print(
@@ -1068,27 +1197,27 @@ def run_cleaning_pipeline(
         if not quiet:
             print()
 
-        # Phase 3: Post-Cleaning Quality Verification
+        # Phase 3: Post-Cleaning Quality Verification on Staged Files
         if not quiet:
-            print(">>> Phase 3: Post-Cleaning Quality Verification...")
+            print(">>> Phase 3: Post-Cleaning Quality Verification (Recomputing Normalized Values)...")
         all_passed = True
         total_rows_verified = 0
 
-        for split, in_path, temp_path, prefix in temp_files:
+        for split, in_path, staged_path, prefix in staged_files:
             t0 = time.time()
-            file_quality = verify_file_quality(in_path, temp_path, expected_prefix=prefix)
+            file_quality = verify_file_quality(in_path, staged_path, expected_prefix=prefix)
             quality_results[f"{split}/{in_path.name}"] = file_quality
             total_rows_verified += file_quality["output_rows"]
 
             if file_quality["status"] != "PASSED":
                 all_passed = False
                 err_msg = "; ".join(file_quality["errors"])
-                raise QualityCheckError("InvariantViolation", str(temp_path), err_msg)
+                raise QualityCheckError("InvariantViolation", str(staged_path), err_msg)
 
             if not quiet:
                 print(
                     f"  [PASSED] {split}/{in_path.name} "
-                    f"({file_quality['output_rows']:,} rows, all invariants satisfied) "
+                    f"({file_quality['output_rows']:,} rows, all 12 invariants satisfied) "
                     f"in {time.time()-t0:.2f}s"
                 )
 
@@ -1096,15 +1225,12 @@ def run_cleaning_pipeline(
             raise QualityCheckError("PipelineFailure", "all", "One or more files failed quality checks")
 
         if not quiet:
-            print("  All quality invariants satisfied across all files.\n")
+            print("  All quality invariants satisfied across all staged files.\n")
 
-        # Phase 4: Atomic Publication & Reports
-        if not quiet:
-            print(">>> Phase 4: Atomic Publication & Writing Reports...")
-        reports_dir = output_dir / "reports"
-        reports_dir.mkdir(parents=True, exist_ok=True)
+        # Phase 4: Stage Reports & Manifest
+        staged_reports_dir = staging_dir / "reports"
+        staged_reports_dir.mkdir(parents=True, exist_ok=True)
 
-        # Build combined profile report
         profile_report = {
             "title": "Amazon ML Challenge 2026 - Dataset Profiling Report",
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1113,11 +1239,11 @@ def run_cleaning_pipeline(
                 "total_rows": sum(p["row_count"] for p in profile_results.values()),
                 "splits": splits,
                 "elapsed_seconds": round(time.time() - start_time, 2),
+                "memory_model": "streaming_row_transformation_with_disk_backed_sqlite_aggregation",
             },
             "files": profile_results,
         }
 
-        # Build combined quality checks report
         quality_report = {
             "title": "Amazon ML Challenge 2026 - Data Quality & Invariant Verification Report",
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1145,37 +1271,106 @@ def run_cleaning_pipeline(
             "file_checks": quality_results,
         }
 
-        # Write reports
-        profile_json_path = reports_dir / "profile.json"
-        quality_json_path = reports_dir / "quality_checks.json"
+        manifest = {
+            "generation_id": staging_dir.name,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "splits": splits,
+            "files": {
+                f"{split}/{in_p.name}": {
+                    "rows": profile_results[f"{split}/{in_p.name}"]["row_count"],
+                    "sha256": hashlib.sha256(staged_p.read_bytes()).hexdigest(),
+                }
+                for split, in_p, staged_p, _ in staged_files
+            },
+        }
 
-        with open(profile_json_path, "w", encoding="utf-8") as f:
+        staged_prof_path = staged_reports_dir / "profile.json"
+        staged_qual_path = staged_reports_dir / "quality_checks.json"
+        staged_man_path = staged_reports_dir / "manifest.json"
+
+        with open(staged_prof_path, "w", encoding="utf-8") as f:
             json.dump(profile_report, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
 
-        with open(quality_json_path, "w", encoding="utf-8") as f:
+        with open(staged_qual_path, "w", encoding="utf-8") as f:
             json.dump(quality_report, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
 
-        # Atomically rename temp files to final destination
-        for (split, in_path, temp_path, prefix), (_, _, final_path, _) in zip(temp_files, final_files):
-            os.replace(temp_path, final_path)
+        with open(staged_man_path, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+
+        # Phase 5: Atomic Rollback-Safe Publication
+        if not quiet:
+            print(">>> Phase 4: Atomic Publication with Rollback Protection...")
+
+        # Injected publication error for test coverage if requested
+        if _inject_publication_error:
+            raise OSError("Injected publication failure for test verification")
+
+        backup_dir = output_dir / f".backup_{int(time.time()*1000)}_{os.getpid()}"
+        published_items = ["train", "test", "reports"]
+        backed_up: List[Tuple[Path, Path]] = []
+
+        try:
+            # Backup existing destination directories
+            for item in published_items:
+                target_path = output_dir / item
+                if target_path.exists():
+                    backup_dir.mkdir(parents=True, exist_ok=True)
+                    dest_backup = backup_dir / item
+                    shutil.move(str(target_path), str(dest_backup))
+                    backed_up.append((dest_backup, target_path))
+
+            # Move staged generation into final destination
+            for item in published_items:
+                src_path = staging_dir / item
+                if src_path.exists():
+                    target_path = output_dir / item
+                    shutil.move(str(src_path), str(target_path))
+
+            # Success: clean up backup
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir, ignore_errors=True)
+
+        except Exception as pub_err:
+            # Rollback: restore backed up items
             if not quiet:
-                print(f"  Published: {final_path}")
+                print(f"  [ROLLBACK] Publication error: {pub_err}. Restoring previous state...", file=sys.stderr)
+            for item in published_items:
+                partially_published = output_dir / item
+                if partially_published.exists():
+                    shutil.rmtree(partially_published, ignore_errors=True)
+
+            for dest_backup, target_path in backed_up:
+                if dest_backup.exists():
+                    shutil.move(str(dest_backup), str(target_path))
+
+            if backup_dir.exists():
+                shutil.rmtree(backup_dir, ignore_errors=True)
+            raise pub_err
+
+        # Clean up staging directory
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
 
         if not quiet:
-            print(f"  Reports written: {profile_json_path}, {quality_json_path}")
+            print(f"  Published: {output_dir / 'train'}")
+            print(f"  Published: {output_dir / 'test'}")
+            print(f"  Published: {output_dir / 'reports' / 'profile.json'}")
+            print(f"  Published: {output_dir / 'reports' / 'quality_checks.json'}")
             print(f"\nPipeline completed successfully in {time.time()-start_time:.2f}s!")
             print("=" * 80)
 
         return profile_report, quality_report
 
     except Exception:
-        # Clean up temporary files on failure
-        for _, _, temp_path, _ in temp_files:
-            if temp_path.exists():
-                try:
-                    temp_path.unlink()
-                except OSError:
-                    pass
+        # Guarantee no partial staging remains on failure
+        if staging_dir.exists():
+            shutil.rmtree(staging_dir, ignore_errors=True)
         raise
 
 
@@ -1206,11 +1401,6 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Dataset split to process: 'all' (default), 'train', or 'test'",
     )
     parser.add_argument(
-        "--skip-validation",
-        action="store_true",
-        help="Skip pre-cleaning input structural validation (not recommended)",
-    )
-    parser.add_argument(
         "--quiet",
         action="store_true",
         help="Suppress verbose progress output",
@@ -1227,7 +1417,6 @@ def main() -> int:
             input_dir=args.input_dir,
             output_dir=args.output_dir,
             splits=splits,
-            skip_validation=args.skip_validation,
             quiet=args.quiet,
         )
         return 0
