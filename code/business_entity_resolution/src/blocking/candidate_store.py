@@ -159,6 +159,28 @@ class CandidateStore:
         """, (s1_id,))
         return {cid: prov for cid, prov in self.cur.fetchall()}
 
+    def get_capped_candidates_for_s1(
+        self,
+        s1_id: str,
+        max_candidates_per_source: int,
+    ) -> Dict[str, int]:
+        """
+        Fetch candidates for S1 and apply deterministic ranking and capping per source.
+        Returns Dict[cand_id, provenance].
+        """
+        all_cands = self.get_candidates_for_s1(s1_id)
+        if not all_cands:
+            return {}
+
+        s2_cands = [(cid, prov) for cid, prov in all_cands.items() if cid.startswith("S2-")]
+        s3_cands = [(cid, prov) for cid, prov in all_cands.items() if cid.startswith("S3-")]
+
+        s2_retained, _ = rank_and_cap_candidates(s2_cands, max_candidates_per_source)
+        s3_retained, _ = rank_and_cap_candidates(s3_cands, max_candidates_per_source)
+
+        retained_set = set(s2_retained + s3_retained)
+        return {cid: prov for cid, prov in all_cands.items() if cid in retained_set}
+
     def close(self) -> None:
         """Flush any pending rows and close database connection."""
         self.flush()

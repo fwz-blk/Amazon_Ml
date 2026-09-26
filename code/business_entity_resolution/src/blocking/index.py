@@ -45,11 +45,16 @@ class CandidateSourceIndex:
         config: BlockingConfig,
         temp_dir: Optional[Path] = None,
         in_memory: bool = False,
+        existing_db_path: Optional[Path] = None,
+        read_only: bool = False,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.source_name = source_name
         self.config = config
         self.total_records = 0
         self.observed_countries: Set[str] = set()
+        self.has_missing_country_records: bool = False
+        self.read_only = read_only
 
         # Overflow tracking
         self.overflow_events: List[Dict[str, Any]] = []
@@ -60,8 +65,30 @@ class CandidateSourceIndex:
         self.filtered_num_loc: Set[Tuple[str, str, str]] = set()
         self.filtered_ngrams: Set[Tuple[str, str]] = set()
 
+        if metadata:
+            self.total_records = metadata.get("total_records", 0)
+            self.observed_countries = set(metadata.get("observed_countries", []))
+            self.has_missing_country_records = metadata.get("has_missing_country_records", False)
+            self.filtered_name_tokens = set(tuple(x) for x in metadata.get("filtered_name_tokens", []))
+            self.filtered_addr_tokens = set(tuple(x) for x in metadata.get("filtered_addr_tokens", []))
+            self.filtered_num_loc = set(tuple(x) for x in metadata.get("filtered_num_loc", []))
+            self.filtered_ngrams = set(tuple(x) for x in metadata.get("filtered_ngrams", []))
+
         # Database setup
         self.in_memory = in_memory
+        if existing_db_path:
+            self.db_path = existing_db_path
+            if read_only:
+                self.conn = sqlite3.connect(f"file:{self.db_path.resolve()}?mode=ro", uri=True)
+            else:
+                self.conn = sqlite3.connect(str(self.db_path))
+            self.cur = self.conn.cursor()
+            self.cur.execute(f"PRAGMA cache_size = -{config.sqlite_cache_size_kb}")
+            self.cur.execute("PRAGMA mmap_size = 4294967296")
+            if read_only:
+                self.cur.execute("PRAGMA query_only = ON")
+            return
+
         if in_memory:
             self.db_path: Optional[Path] = None
             self.conn = sqlite3.connect(":memory:")
@@ -144,6 +171,8 @@ class CandidateSourceIndex:
         self.total_records += 1
         if country_norm:
             self.observed_countries.add(country_norm)
+        else:
+            self.has_missing_country_records = True
 
         # 1. Exact normalized name
         if name_norm:
@@ -250,6 +279,21 @@ class CandidateSourceIndex:
             (max_ngram_df,),
         )
         self.filtered_ngrams = set(self.cur.fetchall())
+
+        self.cur.execute("PRAGMA mmap_size = 4294967296")
+        self.cur.execute("PRAGMA query_only = ON")
+
+    def get_metadata(self) -> Dict[str, Any]:
+        """Export index metadata for read-only worker processes."""
+        return {
+            "total_records": self.total_records,
+            "observed_countries": list(self.observed_countries),
+            "has_missing_country_records": self.has_missing_country_records,
+            "filtered_name_tokens": list(self.filtered_name_tokens),
+            "filtered_addr_tokens": list(self.filtered_addr_tokens),
+            "filtered_num_loc": list(self.filtered_num_loc),
+            "filtered_ngrams": list(self.filtered_ngrams),
+        }
 
     def build_from_tsv(self, tsv_path: Path, max_rows: Optional[int] = None) -> None:
         """Build inverted index from a cleaned TSV file in a single streaming pass."""
@@ -606,6 +650,9 @@ class CandidateSourceIndex:
         Query candidates where the candidate record has missing country (country = '').
         Invoked when Source 1 has a known country, but candidate side is missing country.
         """
+        if not getattr(self, "has_missing_country_records", False):
+            return []
+
         cands: Set[str] = set()
 
         # 1. Exact normalized name on candidate records with country = ''
@@ -743,6 +790,9 @@ class CandidateSourceIndex:
             except Exception:
                 pass
             self.conn = None
+
+        if getattr(self, "read_only", False):
+            return
 
         if self.db_path and self.db_path.exists():
             try:

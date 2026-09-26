@@ -107,15 +107,23 @@ class BlockingEvaluator:
     def evaluate_from_store(
         self,
         store: Any,
+        max_candidates_per_source: Optional[int] = None,
         overflow_events: Optional[List[Dict[str, Any]]] = None,
         total_candidate_universe: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Evaluate candidate retrieval streaming directly from CandidateStore,
-        avoiding in-memory retention of full candidate sets.
+        optionally applying deterministic ranking and capping per source.
         """
+        if max_candidates_per_source is not None:
+            candidate_getter = lambda s1_id: store.get_capped_candidates_for_s1(
+                s1_id, max_candidates_per_source
+            )
+        else:
+            candidate_getter = lambda s1_id: store.get_candidates_for_s1(s1_id)
+
         return self._evaluate_stream(
-            lambda s1_id: store.get_candidates_for_s1(s1_id),
+            candidate_getter,
             overflow_events=overflow_events,
             total_candidate_universe=total_candidate_universe,
         )

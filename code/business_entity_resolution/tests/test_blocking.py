@@ -25,6 +25,7 @@ Covers:
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
@@ -60,7 +61,7 @@ from blocking.keys import (
     tokenize_unicode,
 )
 from blocking.passes import generate_candidates_for_s1
-from blocking.run_blocking import run_blocking_pipeline
+from blocking.run_blocking import run_blocking_pipeline, run_cap_sweep
 
 
 class TestKeyDerivation(unittest.TestCase):
@@ -601,6 +602,172 @@ class TestSyntheticFixture(unittest.TestCase):
         tsv2, _, _ = run_blocking_pipeline(config2, quiet=True)
 
         self.assertEqual(tsv1.read_bytes(), tsv2.read_bytes())
+
+
+class TestCapSweepAndConfig(unittest.TestCase):
+    """
+    Test candidate cap CLI overrides, cap sweep report structure,
+    independent S2/S3 recall rejection, and deterministic evaluation.
+    """
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.base_path = Path(self.temp_dir)
+        self.dataset_dir = self.base_path / "cleaned"
+        self.output_dir = self.base_path / "candidates_val"
+        self.train_dir = self.dataset_dir / "train"
+        self.train_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create basic fixture
+        s1_rows = [
+            "entity_id\tbusiness_name\tbusiness_address\tcountry\tbusiness_name_normalized\tbusiness_address_normalized\tcountry_normalized\tbusiness_name_is_missing\tbusiness_address_is_missing\tcountry_is_missing\n",
+            "S1-01\tAcme Corp\t100 Main St\tUS\tacme corp\t100 main st\tus\tFalse\tFalse\tFalse\n",
+            "S1-02\tBeta LLC\t200 Oak Ave\tUS\tbeta llc\t200 oak ave\tus\tFalse\tFalse\tFalse\n",
+        ]
+        s2_rows = [
+            "entity_id\tbusiness_name\tbusiness_address\tcountry\tbusiness_name_normalized\tbusiness_address_normalized\tcountry_normalized\tbusiness_name_is_missing\tbusiness_address_is_missing\tcountry_is_missing\n",
+            "S2-01\tAcme Corp\t100 Main St\tUS\tacme corp\t100 main st\tus\tFalse\tFalse\tFalse\n",
+            "S2-02\tBeta LLC\t200 Oak Ave\tUS\tbeta llc\t200 oak ave\tus\tFalse\tFalse\tFalse\n",
+        ]
+        s3_rows = [
+            "entity_id\tbusiness_name\tbusiness_address\tcountry\tbusiness_name_normalized\tbusiness_address_normalized\tcountry_normalized\tbusiness_name_is_missing\tbusiness_address_is_missing\tcountry_is_missing\n",
+            "S3-01\tAcme Corp\t100 Main St\tUS\tacme corp\t100 main st\tus\tFalse\tFalse\tFalse\n",
+            "S3-02\tBeta LLC\t200 Oak Ave\tUS\tbeta llc\t200 oak ave\tus\tFalse\tFalse\tFalse\n",
+        ]
+        gt_rows = [
+            "source1_entity_id\tmatched_entity_ids\n",
+            "S1-01\tS2-01,S3-01\n",
+            "S1-02\tS2-02,S3-02\n",
+        ]
+
+        (self.train_dir / "train_source1.tsv").write_text("".join(s1_rows), encoding="utf-8")
+        (self.train_dir / "train_source2.tsv").write_text("".join(s2_rows), encoding="utf-8")
+        (self.train_dir / "train_source3.tsv").write_text("".join(s3_rows), encoding="utf-8")
+        self.gt_path = self.train_dir / "train_ground_truth.tsv"
+        self.gt_path.write_text("".join(gt_rows), encoding="utf-8")
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_cli_cap_override(self):
+        """CLI option --max-candidates-per-s1-per-source overrides config."""
+        config = BlockingConfig(max_candidates_per_s1_per_source=2500)
+        self.assertEqual(config.max_candidates_per_s1_per_source, 2500)
+
+    def test_cap_recorded_in_diagnostics(self):
+        """Candidate cap must be recorded in diagnostics JSON."""
+        config = BlockingConfig(
+            split="train",
+            input_dir=self.dataset_dir,
+            output_dir=self.output_dir,
+            ground_truth_path=self.gt_path,
+            max_candidates_per_s1_per_source=750,
+            holdout_ratio=1.0,
+        )
+        _, diag_path, diags = run_blocking_pipeline(config, quiet=True)
+        self.assertEqual(diags["configuration"]["max_candidates_per_s1_per_source"], 750)
+
+        # Check persisted file
+        loaded = json.loads(diag_path.read_text(encoding="utf-8"))
+        self.assertEqual(loaded["configuration"]["max_candidates_per_s1_per_source"], 750)
+
+    def test_cap_sweep_report_structure(self):
+        """Cap-sweep report structure contains all required sections and summary TSV columns."""
+        config = BlockingConfig(
+            split="train",
+            input_dir=self.dataset_dir,
+            output_dir=self.output_dir,
+            ground_truth_path=self.gt_path,
+            holdout_ratio=1.0,
+        )
+        rep_path, sum_path, report = run_cap_sweep(config, caps=[1, 2, 5], quiet=True)
+
+        self.assertTrue(rep_path.is_file())
+        self.assertTrue(sum_path.is_file())
+
+        # Verify JSON report structure
+        required_keys = [
+            "title", "timestamp", "blocking_version", "git_commit",
+            "effective_configuration", "holdout_definition", "acceptance_criteria",
+            "recommended_cap", "acceptance_decision", "cap_results",
+            "summary_table", "production_projections",
+        ]
+        for k in required_keys:
+            self.assertIn(k, report)
+
+        # Verify summary TSV columns
+        expected_cols = [
+            "cap", "validation_s1_count", "true_pairs", "retrieved_true_pairs",
+            "missed_true_pairs", "pair_recall", "s2_recall", "s3_recall",
+            "s1_coverage", "generated_pairs", "retained_pairs", "truncated_pairs",
+            "capped_s1_count", "candidates_p50_before", "candidates_p95_before",
+            "candidates_p99_before", "candidates_max_before", "candidates_p50_after",
+            "candidates_p95_after", "candidates_p99_after", "candidates_max_after",
+            "overflow_events", "candidates_lost_before_store", "runtime_seconds",
+            "peak_rss_mb", "index_db_size_bytes", "candidate_output_size_bytes",
+        ]
+        lines = sum_path.read_text(encoding="utf-8").strip().splitlines()
+        header_cols = lines[0].split("\t")
+        self.assertEqual(header_cols, expected_cols)
+        # Verify 3 rows for caps [1, 2, 5]
+        self.assertEqual(len(lines), 4)
+
+    def test_independent_s2_s3_recall_and_rejection(self):
+        """Evaluation must reject a cap if either S2 or S3 recall is below 99%."""
+        gt = {
+            "S1-01": {"S2-01", "S3-01"},
+            "S1-02": {"S2-02", "S3-02"},
+        }
+        evaluator = BlockingEvaluator(gt)
+
+        # Mock retrieved candidates where S2 is 100% (2/2) but S3 is 50% (1/2)
+        retrieved = {
+            "S1-01": {"S2-01": 1, "S3-01": 1},
+            "S1-02": {"S2-02": 1},  # Missing S3-02
+        }
+        res = evaluator.evaluate_candidates(retrieved)
+
+        # S2 recall is 100%, S3 recall is 50%, overall recall is 75%
+        self.assertEqual(res["s2_recall"], 1.0)
+        self.assertEqual(res["s3_recall"], 0.5)
+        self.assertEqual(res["pair_recall"], 0.75)
+        self.assertFalse(res["target_achieved"])
+
+    def test_no_stale_candidate_database_reuse(self):
+        """Pre-existing database files in output directory must be overwritten/cleaned safely."""
+        db_path = self.output_dir / "candidates_val.db"
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        db_path.write_text("stale_dummy_data")
+
+        config = BlockingConfig(
+            split="train",
+            input_dir=self.dataset_dir,
+            output_dir=self.output_dir,
+            ground_truth_path=self.gt_path,
+            holdout_ratio=1.0,
+        )
+        run_cap_sweep(config, caps=[2], quiet=True)
+        # Database must have been recreated as a valid SQLite db
+        self.assertTrue(db_path.is_file())
+        with open(db_path, "rb") as f:
+            header = f.read(16)
+            self.assertEqual(header, b"SQLite format 3\x00")
+
+    def test_cleanup_after_cap_runs(self):
+        """Index database files must be cleaned up after cap sweep finishes."""
+        config = BlockingConfig(
+            split="train",
+            input_dir=self.dataset_dir,
+            output_dir=self.output_dir,
+            ground_truth_path=self.gt_path,
+            holdout_ratio=1.0,
+        )
+        run_cap_sweep(config, caps=[2], quiet=True)
+        # Ensure no temporary idx_*.db files remain in output_dir/.idx_tmp
+        idx_tmp = self.output_dir / ".idx_tmp"
+        if idx_tmp.exists():
+            remaining_dbs = list(idx_tmp.glob("idx_*.db"))
+            self.assertEqual(len(remaining_dbs), 0)
 
 
 if __name__ == "__main__":
