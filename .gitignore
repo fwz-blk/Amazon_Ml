@@ -1,8 +1,13 @@
+# Raw dataset files (multi-gigabyte artifacts)
+student_resource/dataset/**/*.tsv
+student_resource/dataset/*.tsv
+
 # Generated dataset artifacts (multi-gigabyte files)
 cleaned/train/
 cleaned/test/
 cleaned/**/*.tsv
 cleaned/**/.tmp_*
+
 
 # Candidate generation outputs and databases (multi-gigabyte artifacts)
 candidates*/
